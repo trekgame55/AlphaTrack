@@ -1,0 +1,29 @@
+/media/root/8f946e37-6760-41b2-9a87-6c5d18600e3b/lost+found/we/backend/main.py:53: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+INFO:     Started server process [265663]
+INFO:     Waiting for application startup.
+2026-04-25 09:42:59,120 [INFO] main: Creating database tables...
+2026-04-25 09:42:59,123 [INFO] main: Starting backup service...
+2026-04-25 09:42:59,123 [INFO] backup: [Backup] Backup service started (hourly)
+2026-04-25 09:42:59,124 [INFO] main: Backend ready ✓
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2026-04-25 09:42:59,127 [INFO] backup: [Backup] Created /media/root/8f946e37-6760-41b2-9a87-6c5d18600e3b/lost+found/we/backend/backups/app_20260425_094259.db
+INFO:     127.0.0.1:48152 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51806 - "GET /api/auth/me HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:45920 - "GET /api/auth/check-email?email=Lan9es%40proton.me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40312 - "POST /api/auth/register HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40312 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59398 - "GET /api/auth/check-email?email=Lna9es%40proton.me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53830 - "GET /api/auth/check-email?email=Lan9es%40proton.me HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53830 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53830 - "GET /api/auth/me HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [265663]
