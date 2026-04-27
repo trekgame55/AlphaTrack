@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useWorkspace } from "@/lib/workspace-context";
 import { createTeamAction, renameWorkspaceAction, deleteWorkspaceAction, generateInviteLink } from "@/actions/workspace";
-import { ChevronDown, Check, Plus, LogOut, Settings, Loader2, X, MoreVertical, Pencil, Trash2, UserPlus, Copy } from "lucide-react";
+import { ChevronDown, Check, Plus, LogOut, Settings, Loader2, X, MoreVertical, Pencil, Trash2, UserPlus, Copy, Settings2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { WorkspaceSettingsModal } from "./workspace-settings-modal";
 
 type InviteRole = "admin" | "member" | "viewer";
 const INVITE_ROLES: { value: InviteRole; label: string; hint: string }[] = [
@@ -303,6 +304,14 @@ export function UserProfileWidget() {
         </div>
       ))}
 
+      {settingsWs && (
+        <WorkspaceSettingsModal
+          workspaceId={settingsWs.id}
+          workspaceName={settingsWs.name}
+          onClose={() => setSettingsWs(null)}
+        />
+      )}
+
       {portal(activeMenu && (
         <div className="fixed inset-0 z-[110]" onClick={() => setActiveMenu(null)}>
           <div 
@@ -310,6 +319,9 @@ export function UserProfileWidget() {
             style={{ top: activeMenu.y, left: activeMenu.x - 160 }}
             onClick={(e) => e.stopPropagation()}
           >
+            <button onClick={() => { setSettingsWs({ id: activeMenu.id, name: activeMenu.name }); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-white/5 text-foreground">
+              <Settings2 className="w-3 h-3" /> Настройки
+            </button>
             <button onClick={() => { setNewName(activeMenu.name); setEditWsId(activeMenu.id); setShowCreate(true); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-white/5 text-foreground">
               <Pencil className="w-3 h-3" /> Переименовать
             </button>
