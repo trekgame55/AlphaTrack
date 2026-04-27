@@ -20,6 +20,7 @@ export function UserProfileWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [activeMenu, setActiveMenu] = useState<{ id: string, name: string, x: number, y: number } | null>(null);
+  const [settingsWs, setSettingsWs] = useState<{ id: string, name: string } | null>(null);
   const [newName, setNewName] = useState("");
   const [editWsId, setEditWsId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
