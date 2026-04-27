@@ -10,19 +10,6 @@ async function getToken(): Promise<string | null> {
   return store.get(COOKIE)?.value ?? null;
 }
 
-function setSessionCookie(token: string) {
-  cookies().then(store => {
-    const expires = new Date();
-    expires.setDate(expires.getDate() + 30);
-    store.set(COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      expires,
-      path: "/",
-      sameSite: "lax",
-    });
-  });
-}
 
 export async function checkEmailExists(email: string): Promise<boolean> {
   try {
@@ -41,7 +28,7 @@ export async function loginUser(rawEmail: string, rawPassword: string) {
     expires.setDate(expires.getDate() + 30);
     store.set(COOKIE, data.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
       sameSite: "lax",
@@ -72,7 +59,7 @@ export async function registerUser(rawName: string, rawEmail: string, rawPasswor
     expires.setDate(expires.getDate() + 30);
     store.set(COOKIE, data.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: false,
       expires,
       path: "/",
       sameSite: "lax",
