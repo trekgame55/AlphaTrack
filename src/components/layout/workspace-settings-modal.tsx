@@ -534,8 +534,8 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
           </thead>
           <tbody>
             {PERM_GROUPS.map((group, gi) => (
-              <
-                <tr key={`g-${gi}`} key={`g-${gi}`}>
+              <React.Fragment key={`g-${gi}`}>
+                <tr>
                   <td colSpan={1 + ROLE_HEADERS.length} className="pt-4 pb-1 px-2 text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
                     {group.title}
                   </td>

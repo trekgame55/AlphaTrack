@@ -729,7 +729,8 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
           </div>
         </div>
 
-        {/* Comment Input */}
+        {/* Comment Input — hidden if user can't comment */}
+        {canComment && (
         <div className="px-5 py-3 border-t border-border shrink-0 bg-[#111111]">
           {commentError && (
             <div className="mb-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
