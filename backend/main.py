@@ -143,8 +143,8 @@ def download_current_db(user: User = Depends(get_current_user)):
 
 
 @app.get("/api/stats")
-def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    from models import WorkspaceMember, Task, Contact, Comment, Tag as TagModel, Project, Session as DbSession
+def get_stats(db: DbSession = Depends(get_db), user: User = Depends(get_current_user)):
+    from models import WorkspaceMember, Task, Contact, Comment, Tag as TagModel, Project
     from backup import DB_PATH
     result = {
         "users":      db.query(User).count(),
