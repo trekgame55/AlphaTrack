@@ -186,3 +186,29 @@ export async function revokeInviteAction(workspaceId: string, inviteId: string) 
 export async function changeMemberRole(workspaceId: string, userId: string, role: string) {
   return { success: true }; // TODO: add PATCH /workspaces/{id}/members/{uid}/role
 }
+
+// ─── Role permissions ─────────────────────────────────────────────────────────
+
+export async function getRolePermissionsAction(workspaceId: string) {
+  const token = await getToken();
+  if (!token) return null;
+  try {
+    return await api.workspaces.getPermissions(token, workspaceId);
+  } catch (err: any) {
+    return null;
+  }
+}
+
+export async function updateRolePermissionsAction(
+  workspaceId: string,
+  matrix: Record<string, Record<string, boolean>>,
+) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    const res = await api.workspaces.updatePermissions(token, workspaceId, matrix);
+    return { success: true, matrix: res.matrix };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось сохранить права" };
+  }
+}

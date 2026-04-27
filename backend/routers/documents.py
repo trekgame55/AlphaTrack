@@ -4,6 +4,7 @@ from database import get_db
 from models import Document, WorkspaceMember, User
 from schemas import DocumentCreate, DocumentUpdate, DocumentOut
 from deps import get_current_user
+from permissions import require_permission
 import uuid
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -19,6 +20,7 @@ def _check_member(db, workspace_id: str, user_id: str):
 @router.get("")
 def list_documents(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "documents.view")
     docs = (
         db.query(Document)
         .filter_by(workspaceId=workspace_id)
@@ -34,12 +36,14 @@ def get_document(doc_id: str, db: Session = Depends(get_db), user: User = Depend
     if not doc:
         raise HTTPException(404, "Document not found")
     _check_member(db, doc.workspaceId, user.id)
+    require_permission(db, doc.workspaceId, user.id, "documents.view")
     return doc
 
 
 @router.post("")
 def create_document(workspace_id: str, body: DocumentCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "documents.create")
     doc = Document(
         id=str(uuid.uuid4()),
         title=body.title[:300],
@@ -60,6 +64,7 @@ def update_document(doc_id: str, body: DocumentUpdate, db: Session = Depends(get
     if not doc:
         raise HTTPException(404, "Document not found")
     _check_member(db, doc.workspaceId, user.id)
+    require_permission(db, doc.workspaceId, user.id, "documents.edit")
 
     if body.title is not None:
         doc.title = body.title[:300]
@@ -79,6 +84,7 @@ def delete_document(doc_id: str, db: Session = Depends(get_db), user: User = Dep
     if not doc:
         raise HTTPException(404, "Document not found")
     _check_member(db, doc.workspaceId, user.id)
+    require_permission(db, doc.workspaceId, user.id, "documents.delete")
     db.delete(doc)
     db.commit()
     return {"success": True}

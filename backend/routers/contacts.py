@@ -4,6 +4,7 @@ from database import get_db
 from models import Contact, ContactPhone, WorkspaceMember, User
 from schemas import ContactCreate, ContactUpdate, ContactOut
 from deps import get_current_user
+from permissions import require_permission
 import uuid
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -19,6 +20,7 @@ def _check_member(db, workspace_id: str, user_id: str):
 @router.get("")
 def list_contacts(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "contacts.view")
     contacts = (
         db.query(Contact)
         .options(joinedload(Contact.phones))
@@ -32,6 +34,7 @@ def list_contacts(workspace_id: str, db: Session = Depends(get_db), user: User =
 @router.post("")
 def create_contact(workspace_id: str, body: ContactCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "contacts.manage")
 
     contact = Contact(
         id=str(uuid.uuid4()),
@@ -64,6 +67,7 @@ def update_contact(contact_id: str, body: ContactUpdate, db: Session = Depends(g
     if not contact:
         raise HTTPException(404, "Contact not found")
     _check_member(db, contact.workspaceId, user.id)
+    require_permission(db, contact.workspaceId, user.id, "contacts.manage")
 
     if body.firstName is not None:
         contact.firstName = body.firstName[:100]
@@ -95,6 +99,7 @@ def delete_contact(contact_id: str, db: Session = Depends(get_db), user: User = 
     if not contact:
         raise HTTPException(404, "Contact not found")
     _check_member(db, contact.workspaceId, user.id)
+    require_permission(db, contact.workspaceId, user.id, "contacts.manage")
     db.delete(contact)
     db.commit()
     return {"success": True}

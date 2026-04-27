@@ -44,6 +44,8 @@ export type Workspace = {
   ownerId: string;
   members: WsMember[];
   tags: WsTag[];
+  myRole?: string;
+  myPermissions?: Record<string, boolean>;
 };
 
 type WorkspaceCtx = {
@@ -51,6 +53,7 @@ type WorkspaceCtx = {
   userWorkspaces: { id: string; name: string; slug: string }[];
   currentUser: WsUser | null;
   myRole: string;
+  myPermissions: Record<string, boolean>;
   contacts: WsContact[];
   tags: WsTag[];
   loading: boolean;
@@ -65,6 +68,7 @@ const WorkspaceContext = createContext<WorkspaceCtx>({
   userWorkspaces: [],
   currentUser: null,
   myRole: "viewer",
+  myPermissions: {},
   contacts: [],
   tags: [],
   loading: true,
@@ -76,6 +80,14 @@ const WorkspaceContext = createContext<WorkspaceCtx>({
 
 export function useWorkspace() {
   return useContext(WorkspaceContext);
+}
+
+/** Returns true if the current user has the given permission key in the active workspace.
+ *  Owner/admin always return true. Unknown roles default to false. */
+export function usePermission(key: string): boolean {
+  const { myRole, myPermissions } = useContext(WorkspaceContext);
+  if (myRole === "admin_plus" || myRole === "admin") return true;
+  return Boolean(myPermissions?.[key]);
 }
 
 export function WorkspaceProvider({ userId, children }: { userId: string; children: ReactNode }) {
@@ -137,12 +149,13 @@ export function WorkspaceProvider({ userId, children }: { userId: string; childr
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, activeWorkspaceId]);
 
-  const currentUser = workspace?.members.find(m => m.userId === userId)?.user ?? null;
-  const myRole      = workspace?.members.find(m => m.userId === userId)?.role ?? "viewer";
+  const currentUser    = workspace?.members.find(m => m.userId === userId)?.user ?? null;
+  const myRole         = workspace?.myRole ?? workspace?.members.find(m => m.userId === userId)?.role ?? "viewer";
+  const myPermissions  = workspace?.myPermissions ?? {};
 
   return (
     <WorkspaceContext.Provider value={{
-      workspace, userWorkspaces, currentUser, myRole,
+      workspace, userWorkspaces, currentUser, myRole, myPermissions,
       contacts, tags, loading,
       refresh, setContacts, setTags, switchWorkspace,
     }}>

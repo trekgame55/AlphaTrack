@@ -119,6 +119,20 @@ export const api = {
 
     delete: (token: string, workspaceId: string) =>
       req<{ ok: boolean }>("DELETE", `/workspaces/${workspaceId}`, token),
+
+    getPermissions: (token: string, workspaceId: string) =>
+      req<{
+        keys: string[];
+        configurableRoles: string[];
+        matrix: Record<string, Record<string, boolean>>;
+        myRole: string;
+        myPermissions: Record<string, boolean>;
+      }>("GET", `/workspaces/${workspaceId}/permissions`, token),
+
+    updatePermissions: (token: string, workspaceId: string, matrix: Record<string, Record<string, boolean>>) =>
+      req<{ matrix: Record<string, Record<string, boolean>> }>(
+        "PUT", `/workspaces/${workspaceId}/permissions`, token, { matrix }
+      ),
   },
 
   tasks: {

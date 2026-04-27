@@ -4,6 +4,7 @@ from database import get_db
 from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact
 from schemas import TaskCreate, TaskUpdate, TaskOut, CommentCreate, CommentOut
 from deps import get_current_user
+from permissions import require_permission
 from datetime import datetime, timezone
 import uuid
 import json
@@ -136,6 +137,7 @@ def list_tasks(workspace_id: str, db: Session = Depends(get_db), user: User = De
 @router.post("")
 def create_task(body: TaskCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, body.workspaceId, user.id)
+    require_permission(db, body.workspaceId, user.id, "tasks.create")
 
     due = None
     if body.dueDate:
@@ -170,6 +172,7 @@ def update_task(task_id: str, body: TaskUpdate, db: Session = Depends(get_db), u
     if not task:
         raise HTTPException(404, "Task not found")
     _check_member(db, task.workspaceId, user.id)
+    require_permission(db, task.workspaceId, user.id, "tasks.edit")
 
     # ── Snapshot scalar fields BEFORE mutating, for diff-based activity log ──
     before = {
@@ -301,6 +304,7 @@ def delete_task(task_id: str, db: Session = Depends(get_db), user: User = Depend
     if not task:
         raise HTTPException(404, "Task not found")
     _check_member(db, task.workspaceId, user.id)
+    require_permission(db, task.workspaceId, user.id, "tasks.delete")
     db.delete(task)
     db.commit()
     return {"success": True}
@@ -312,6 +316,7 @@ def add_comment(task_id: str, body: CommentCreate, db: Session = Depends(get_db)
     if not task:
         raise HTTPException(404, "Task not found")
     _check_member(db, task.workspaceId, user.id)
+    require_permission(db, task.workspaceId, user.id, "tasks.comment")
 
     comment = Comment(
         id=str(uuid.uuid4()),

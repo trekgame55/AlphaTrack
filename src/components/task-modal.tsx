@@ -760,6 +760,7 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Close pickers on outside click */}

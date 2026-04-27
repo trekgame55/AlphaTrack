@@ -12,7 +12,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown, ChevronRight, Plus, Flag, GripVertical,
 } from "lucide-react";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspace, usePermission } from "@/lib/workspace-context";
 import { listTasks, createTask, updateTask, deleteTask } from "@/actions/tasks";
 import { TaskModal } from "@/components/task-modal";
 import { canCompleteTask } from "@/lib/permissions";
@@ -180,6 +180,8 @@ function GroupDropZone({ groupId, isOver }: { groupId: string; isOver: boolean }
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const { workspace, currentUser } = useWorkspace();
+  const canCreateTask = usePermission("tasks.create");
+  const canDeleteTask = usePermission("tasks.delete");
 
   // Local task state — reset when workspace changes
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -485,8 +487,9 @@ export default function TasksPage() {
 
                       <GroupDropZone groupId={group} isOver={overGroup === group && activeId !== null} />
 
-                      {/* Add task */}
-                      {addingToGroup === group ? (
+                      {/* Add task — hidden if user can't create */}
+                      {canCreateTask && (
+                      addingToGroup === group ? (
                         <div className="flex items-center px-2 py-1 gap-2">
                           <div className="w-6 shrink-0" />
                           <div className="w-7 shrink-0 flex items-center justify-center">
@@ -517,6 +520,7 @@ export default function TasksPage() {
                           </div>
                           <div className="flex-1">Добавить задачу...</div>
                         </div>
+                      )
                       )}
                     </div>
                   )}

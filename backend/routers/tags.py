@@ -4,6 +4,7 @@ from database import get_db
 from models import Tag, WorkspaceMember, User
 from schemas import TagCreate, TagOut
 from deps import get_current_user
+from permissions import require_permission
 import uuid
 
 router = APIRouter(prefix="/tags", tags=["tags"])
@@ -25,6 +26,7 @@ def list_tags(workspace_id: str, db: Session = Depends(get_db), user: User = Dep
 @router.post("")
 def create_tag(workspace_id: str, body: TagCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "tags.manage")
     tag = Tag(
         id=str(uuid.uuid4()),
         label=body.label[:50],
@@ -43,6 +45,7 @@ def update_tag(tag_id: str, body: TagCreate, db: Session = Depends(get_db), user
     if not tag:
         raise HTTPException(404, "Tag not found")
     _check_member(db, tag.workspaceId, user.id)
+    require_permission(db, tag.workspaceId, user.id, "tags.manage")
     tag.label = body.label[:50]
     tag.color = body.color
     db.commit()
@@ -55,6 +58,7 @@ def delete_tag(tag_id: str, db: Session = Depends(get_db), user: User = Depends(
     if not tag:
         raise HTTPException(404, "Tag not found")
     _check_member(db, tag.workspaceId, user.id)
+    require_permission(db, tag.workspaceId, user.id, "tags.manage")
     db.delete(tag)
     db.commit()
     return {"success": True}

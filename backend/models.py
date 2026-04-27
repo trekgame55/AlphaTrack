@@ -74,6 +74,21 @@ class WorkspaceMember(Base):
     user      = relationship("User",      back_populates="memberships")
 
 
+class RolePermission(Base):
+    """One row per (workspace, role, permission_key) marking whether the role has that permission.
+    Owner (admin_plus) and admin always have all permissions implicitly — not stored here.
+    Configured roles: member, viewer.
+    """
+    __tablename__ = "role_permissions"
+    __table_args__ = (UniqueConstraint("workspaceId", "role", "permKey"),)
+
+    id          = Column(String, primary_key=True, default=gen_id)
+    workspaceId = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    role        = Column(String, nullable=False)
+    permKey     = Column(String, nullable=False)
+    allowed     = Column(Boolean, default=True, nullable=False)
+
+
 class WorkspaceInvite(Base):
     __tablename__ = "workspace_invites"
 

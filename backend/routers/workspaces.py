@@ -8,6 +8,10 @@ from models import Workspace, WorkspaceMember, WorkspaceInvite, User, Tag
 from schemas import WorkspaceCreate, WorkspaceOut, WorkspaceShort, MemberOut, GenerateInviteRequest, MemberRoleUpdate
 from deps import get_current_user
 from auth import create_token
+from permissions import (
+    PERMISSION_KEYS, CONFIGURABLE_ROLES, DEFAULTS,
+    seed_defaults, get_matrix, set_matrix, get_user_permissions,
+)
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
@@ -51,12 +55,17 @@ def get_workspace(
         .first()
     )
 
+    # Compute current user's effective permissions for this workspace
+    my_perms = get_user_permissions(db, ws.id, user.id)
+
     # Serialize manually to include tags
     return {
         "id": ws.id,
         "slug": ws.slug,
         "name": ws.name,
         "ownerId": ws.ownerId,
+        "myRole": membership.role,
+        "myPermissions": my_perms,
         "members": [
             {
                 "id": m.id,
@@ -99,6 +108,8 @@ def create_workspace(body: WorkspaceCreate, db: Session = Depends(get_db), user:
     ]
     for t in default_tags:
         db.add(t)
+    # Seed default role permissions for member/viewer
+    seed_defaults(db, ws.id)
     db.commit()
     db.refresh(ws)
     return {"id": ws.id, "slug": ws.slug, "name": ws.name, "ownerId": ws.ownerId, "members": [], "tags": []}
@@ -272,6 +283,34 @@ def delete_workspace(workspace_id: str, db: Session = Depends(get_db), user: Use
     db.delete(ws)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{workspace_id}/permissions")
+def get_permissions(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    me = _check_member(db, workspace_id, user.id)
+    return {
+        "keys": PERMISSION_KEYS,
+        "configurableRoles": CONFIGURABLE_ROLES,
+        "matrix": get_matrix(db, workspace_id),
+        "myRole": me.role,
+        "myPermissions": get_user_permissions(db, workspace_id, user.id),
+    }
+
+
+@router.put("/{workspace_id}/permissions")
+def update_permissions(
+    workspace_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    matrix = body.get("matrix") or {}
+    if not isinstance(matrix, dict):
+        raise HTTPException(400, "matrix must be an object")
+    set_matrix(db, workspace_id, matrix)
+    return {"matrix": get_matrix(db, workspace_id)}
 
 
 @router.post("/accept-invite")

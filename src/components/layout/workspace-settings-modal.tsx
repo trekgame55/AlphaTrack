@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X, Loader2, Users, Settings, Shield, Link2, Copy, Check,
@@ -10,6 +10,7 @@ import {
   getWorkspaceMembers, removeMember, updateMemberRoleAction,
   renameWorkspaceAction, deleteWorkspaceAction, leaveWorkspaceAction,
   generateInviteLink, listInvitesAction, revokeInviteAction,
+  getRolePermissionsAction, updateRolePermissionsAction,
 } from "@/actions/workspace";
 import { useWorkspace } from "@/lib/workspace-context";
 
@@ -366,45 +367,7 @@ export function WorkspaceSettingsModal({
               </div>
             )}
 
-            {tab === "roles" && (
-              <div className="flex flex-col gap-4 max-w-2xl">
-                <Section title="Системные роли" hint="Базовые права участников. Кастомные роли — скоро.">
-                  <div className="flex flex-col gap-2">
-                    <RoleCard
-                      icon={<Crown className="w-4 h-4 text-amber-400" />}
-                      title="Владелец"
-                      desc="Создатель пространства. Полный доступ ко всему, нельзя удалить."
-                      perms={["Все права администратора", "Удаление пространства", "Передача владения"]}
-                    />
-                    <RoleCard
-                      icon={<Shield className="w-4 h-4 text-blue-400" />}
-                      title="Администратор"
-                      desc="Управляет настройками, участниками и приглашениями."
-                      perms={["Изменять название", "Приглашать/удалять участников", "Менять роли", "Управлять задачами и тегами"]}
-                    />
-                    <RoleCard
-                      icon={<Users className="w-4 h-4 text-emerald-400" />}
-                      title="Участник"
-                      desc="Полная работа с задачами и контактами."
-                      perms={["Создавать/редактировать задачи", "Комментировать", "Создавать контакты и теги"]}
-                    />
-                    <RoleCard
-                      icon={<Eye className="w-4 h-4 text-zinc-400" />}
-                      title="Наблюдатель"
-                      desc="Только просмотр контента."
-                      perms={["Просмотр задач, документов", "Без редактирования"]}
-                    />
-                  </div>
-                </Section>
-
-                <div className="flex items-start gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                  <div className="text-xs text-muted-foreground">
-                    <span className="text-foreground font-medium">Кастомные роли в разработке.</span> Скоро вы сможете создавать свои роли с гибкой настройкой прав.
-                  </div>
-                </div>
-              </div>
-            )}
+            {tab === "roles" && <RolesPermissionsPanel workspaceId={workspaceId} />}
           </div>
         </div>
       </div>
@@ -454,18 +417,177 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
   return <div className="text-xs text-muted-foreground py-3 text-center bg-secondary/20 rounded-lg border border-dashed border-border">{children}</div>;
 }
 
-function RoleCard({ icon, title, desc, perms }: { icon: React.ReactNode; title: string; desc: string; perms: string[] }) {
-  return (
-    <div className="p-3 bg-secondary/20 border border-border/60 rounded-xl">
-      <div className="flex items-center gap-2 mb-1">
-        {icon}
-        <span className="text-sm font-semibold text-foreground">{title}</span>
+// ── Permissions matrix ────────────────────────────────────────────────────
+
+const PERM_GROUPS: { title: string; items: { key: string; label: string; hint?: string }[] }[] = [
+  {
+    title: "Задачи",
+    items: [
+      { key: "tasks.view",    label: "Видеть задачи",        hint: "Открывать страницу задач" },
+      { key: "tasks.create",  label: "Создавать задачи" },
+      { key: "tasks.edit",    label: "Редактировать задачи", hint: "Менять статус, описание, срок и т.д." },
+      { key: "tasks.delete",  label: "Удалять задачи" },
+      { key: "tasks.comment", label: "Комментировать" },
+      { key: "tasks.attach",  label: "Прикреплять файлы" },
+    ],
+  },
+  {
+    title: "Документы",
+    items: [
+      { key: "documents.view",   label: "Видеть документы" },
+      { key: "documents.create", label: "Создавать документы" },
+      { key: "documents.edit",   label: "Редактировать документы" },
+      { key: "documents.delete", label: "Удалять документы" },
+    ],
+  },
+  {
+    title: "Контакты и теги",
+    items: [
+      { key: "contacts.view",   label: "Видеть контакты" },
+      { key: "contacts.manage", label: "Управлять контактами", hint: "Создание, редактирование, удаление" },
+      { key: "tags.manage",     label: "Управлять тегами" },
+    ],
+  },
+  {
+    title: "Команда",
+    items: [
+      { key: "workspace.invite", label: "Приглашать участников" },
+    ],
+  },
+];
+
+const ROLE_HEADERS: { key: string; label: string; cls: string }[] = [
+  { key: "member", label: "Участник",   cls: "text-emerald-400" },
+  { key: "viewer", label: "Наблюдатель", cls: "text-zinc-400" },
+];
+
+function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
+  const [matrix, setMatrix] = useState<Record<string, Record<string, boolean>> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getRolePermissionsAction(workspaceId).then(res => {
+      if (cancelled) return;
+      if (res?.matrix) setMatrix(res.matrix);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+
+  const toggle = (role: string, key: string) => {
+    setMatrix(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [role]: { ...prev[role], [key]: !prev[role]?.[key] },
+      };
+    });
+  };
+
+  const save = async () => {
+    if (!matrix) return;
+    setSaving(true); setError(null);
+    const res: any = await updateRolePermissionsAction(workspaceId, matrix);
+    setSaving(false);
+    if (res?.error) setError(res.error);
+    else { setSavedAt(Date.now()); setTimeout(() => setSavedAt(null), 2000); }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+        <Loader2 className="w-4 h-4 animate-spin" /> Загрузка прав...
       </div>
-      <div className="text-[11px] text-muted-foreground mb-2">{desc}</div>
-      <div className="flex flex-wrap gap-1">
-        {perms.map((p, i) => (
-          <span key={i} className="text-[10px] px-2 py-0.5 rounded-md bg-secondary/60 text-muted-foreground border border-border/50">{p}</span>
-        ))}
+    );
+  }
+
+  if (!matrix) {
+    return <div className="text-sm text-red-400">Не удалось загрузить права</div>;
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="flex items-start gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+        <Shield className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+        <div className="text-[12px] text-muted-foreground">
+          Настройте, что могут делать <span className="text-emerald-400">участники</span> и <span className="text-zinc-300">наблюдатели</span>.
+          Владелец и администраторы всегда имеют полный доступ.
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border/60">
+              <th className="text-left py-2 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-[55%]">Право</th>
+              {ROLE_HEADERS.map(r => (
+                <th key={r.key} className={`text-center py-2 px-2 text-[11px] font-semibold uppercase tracking-wider ${r.cls}`}>
+                  {r.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {PERM_GROUPS.map((group, gi) => (
+              <
+                <tr key={`g-${gi}`} key={`g-${gi}`}>
+                  <td colSpan={1 + ROLE_HEADERS.length} className="pt-4 pb-1 px-2 text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
+                    {group.title}
+                  </td>
+                </tr>
+                {group.items.map(item => (
+                  <tr key={item.key} className="border-b border-border/30 hover:bg-white/[0.02]">
+                    <td className="py-2 px-2">
+                      <div className="text-foreground text-[13px] leading-tight">{item.label}</div>
+                      {item.hint && <div className="text-[11px] text-muted-foreground mt-0.5">{item.hint}</div>}
+                    </td>
+                    {ROLE_HEADERS.map(r => {
+                      const checked = Boolean(matrix[r.key]?.[item.key]);
+                      return (
+                        <td key={r.key} className="py-2 px-2 text-center">
+                          <button
+                            onClick={() => toggle(r.key, item.key)}
+                            className={`w-9 h-5 rounded-full transition-colors relative ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
+                            aria-pressed={checked}
+                          >
+                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {error && (
+        <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5" /> {error}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 pt-2 border-t border-border/40">
+        <button
+          onClick={save}
+          disabled={saving}
+          className="px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Сохранить права
+        </button>
+        {savedAt && <span className="text-[12px] text-emerald-400 flex items-center gap-1"><Check className="w-3.5 h-3.5" /> Сохранено</span>}
+      </div>
+
+      <div className="text-[11px] text-muted-foreground">
+        После сохранения участники увидят изменения при следующем обновлении страницы.
       </div>
     </div>
   );
