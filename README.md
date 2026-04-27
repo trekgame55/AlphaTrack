@@ -58,12 +58,14 @@ nano /opt/alphatrack/.env
 bash /opt/alphatrack/deploy/setup.sh
 ```
 
-Further updates — one command from your local machine:
+**Full step-by-step installation from a clean Debian** (server prep, systemd, nginx, SSL, backups, troubleshooting): see [INSTALL_EN.md](./INSTALL_EN.md).
+
+Quick re-deploy from your local machine:
 ```bash
 bash deploy/deploy.sh root@YOUR_IP
 ```
 
-Full details: [DOCUMENTATION_EN.md](./DOCUMENTATION_EN.md)
+Architecture & API reference: [DOCUMENTATION_EN.md](./DOCUMENTATION_EN.md)
 
 ---
 
@@ -147,12 +149,14 @@ nano /opt/alphatrack/.env
 bash /opt/alphatrack/deploy/setup.sh
 ```
 
-Дальнейшие обновления — одной командой с локальной машины:
+**Полная пошаговая установка с нуля на чистый Debian** (подготовка сервера, systemd, nginx, SSL, бэкапы, troubleshooting): см. [INSTALL_RU.md](./INSTALL_RU.md) · [English](./INSTALL_EN.md).
+
+Быстрое обновление с локальной машины:
 ```bash
 bash deploy/deploy.sh root@YOUR_IP
 ```
 
-Подробнее — в [DOCUMENTATION_RU.md](./DOCUMENTATION_RU.md)
+Архитектура и описание API: [DOCUMENTATION_RU.md](./DOCUMENTATION_RU.md)
 
 ---
 
