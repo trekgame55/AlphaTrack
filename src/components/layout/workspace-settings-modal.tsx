@@ -553,11 +553,11 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
                       <div key={r.key} className="w-[76px] flex justify-center shrink-0">
                         <button
                           onClick={() => toggle(r.key, item.key)}
-                          className={`w-9 h-5 rounded-full transition-colors relative ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
+                          className={`w-9 h-5 rounded-full transition-colors relative box-border ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
                           aria-pressed={checked}
                           title={`${r.label}: ${item.label}`}
                         >
-                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-4" : "translate-x-0"}`} />
                         </button>
                       </div>
                     );
