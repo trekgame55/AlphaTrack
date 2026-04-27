@@ -55,6 +55,7 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
   const [contactNewName, setContactNewName] = useState("");
   const [contactEditModal, setContactEditModal] = useState<Contact | null | "new">(null);
   const { currentUser, contacts: wsContacts, setContacts: setWsContacts, workspace, tags: wsTags, setTags: setWsTags } = useWorkspace();
+  const canComment = usePermission("tasks.comment");
   const allStatuses = useAllStatuses();
 
   // Pull all real workspace members (everyone who joined the team — including invitees).
