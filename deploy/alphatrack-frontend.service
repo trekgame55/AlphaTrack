@@ -4,7 +4,7 @@ After=network.target alphatrack-backend.service
 
 [Service]
 Type=simple
-User=alphatrack
+User=root
 WorkingDirectory=/opt/alphatrack
 ExecStart=/usr/bin/node /opt/alphatrack/.next/standalone/server.js
 Restart=always
@@ -14,8 +14,7 @@ StandardError=journal
 Environment=NODE_ENV=production
 Environment=NEXT_TELEMETRY_DISABLED=1
 Environment=PORT=4040
-Environment=HOSTNAME=127.0.0.1
-EnvironmentFile=/opt/alphatrack/.env
+Environment=HOSTNAME=0.0.0.0
 
 [Install]
 WantedBy=multi-user.target
