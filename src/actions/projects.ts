@@ -1,38 +1,36 @@
 "use server";
 
-import { db } from "@/lib/db";
-import { getCurrentUser } from "./workspace";
-import { revalidatePath } from "next/cache";
-
-// ─── List projects in workspace ───────────────────────────────────────────────
+import { api } from "@/lib/api";
+import { getToken } from "./workspace";
 
 export async function listProjects(workspaceId: string) {
-  return db.project.findMany({
-    where: { workspaceId },
-    include: { tasks: true },
-    orderBy: { createdAt: "asc" },
-  });
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    return await api.projects.list(token, workspaceId);
+  } catch {
+    return [];
+  }
 }
-
-// ─── Create project ───────────────────────────────────────────────────────────
 
 export async function createProject(workspaceId: string, name: string, color: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: "Нет авторизации" };
-
-  const project = await db.project.create({
-    data: { name, color, workspaceId },
-    include: { tasks: true },
-  });
-
-  revalidatePath("/projects");
-  return { project };
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    const project = await api.projects.create(token, workspaceId, name, color);
+    return { project };
+  } catch (err: any) {
+    return { error: err?.message ?? "Ошибка" };
+  }
 }
 
-// ─── Delete project ───────────────────────────────────────────────────────────
-
 export async function deleteProject(projectId: string) {
-  await db.project.delete({ where: { id: projectId } });
-  revalidatePath("/projects");
-  return { success: true };
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    await api.projects.delete(token, projectId);
+    return { success: true };
+  } catch (err: any) {
+    return { error: err?.message ?? "Ошибка" };
+  }
 }

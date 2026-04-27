@@ -182,6 +182,17 @@ export const api = {
       req("DELETE", `/tags/${tagId}`, token),
   },
 
+  projects: {
+    list: (token: string, workspaceId: string) =>
+      req<ProjectDTO[]>("GET", "/projects", token, undefined, { workspace_id: workspaceId }),
+
+    create: (token: string, workspaceId: string, name: string, color: string) =>
+      req<ProjectDTO>("POST", "/projects", token, { name, color }, { workspace_id: workspaceId }),
+
+    delete: (token: string, projectId: string) =>
+      req("DELETE", `/projects/${projectId}`, token),
+  },
+
   documents: {
     list: (token: string, workspaceId: string) =>
       req<DocumentDTO[]>("GET", "/documents", token, undefined, { workspace_id: workspaceId }),
@@ -262,6 +273,9 @@ export interface TaskDTO {
   createdAt: string;
   project?: { id: string; name: string; color: string } | null;
   contact?: ContactDTO | null;
+}
+export interface ProjectDTO {
+  id: string; name: string; color: string; workspaceId: string;
 }
 export interface DocumentDTO {
   id: string; title: string; content?: string; icon?: string;

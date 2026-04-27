@@ -11,7 +11,7 @@ from database import engine, Base, get_db
 from sqlalchemy.orm import Session as DbSession
 from backup import start_backup_service, list_backups, manual_backup
 from deps import get_current_user
-from models import User, Workspace
+from models import User, Workspace, Project
 
 import models
 from routers import auth, workspaces, tasks, contacts, documents, tags
@@ -49,6 +49,47 @@ app.include_router(tasks.router,       prefix="/api")
 app.include_router(contacts.router,    prefix="/api")
 app.include_router(documents.router,   prefix="/api")
 app.include_router(tags.router,        prefix="/api")
+
+
+@app.get("/api/projects")
+def list_projects(
+    workspace_id: str,
+    db: DbSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from sqlalchemy import asc
+    items = db.query(Project).filter(Project.workspaceId == workspace_id).order_by(asc(Project.createdAt)).all()
+    return [{"id": p.id, "name": p.name, "color": p.color, "workspaceId": p.workspaceId} for p in items]
+
+
+@app.post("/api/projects")
+def create_project(
+    workspace_id: str,
+    data: dict,
+    db: DbSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    import uuid
+    p = Project(id=str(uuid.uuid4()), name=data["name"], color=data.get("color", "bg-purple-500"), workspaceId=workspace_id)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return {"id": p.id, "name": p.name, "color": p.color, "workspaceId": p.workspaceId}
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(
+    project_id: str,
+    db: DbSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    p = db.query(Project).filter(Project.id == project_id).first()
+    if not p:
+        raise HTTPException(404, "Not found")
+    db.delete(p)
+    db.commit()
+    return {"ok": True}
+
 
 @app.get("/api/health")
 def health():

@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverActions: {
-    allowedOrigins: ['*'],
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['*'],
+    },
   },
   devIndicators: {
     appIsrStatus: false,
