@@ -524,7 +524,7 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
       <div className="sticky top-0 bg-[#0f0f0f] z-10 flex items-center gap-2 pb-2 border-b border-border/60">
         <div className="flex-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Право</div>
         {ROLE_HEADERS.map(r => (
-          <div key={r.key} className={`w-12 text-center text-[10px] font-semibold uppercase tracking-wider ${r.cls}`}>
+          <div key={r.key} className={`w-[76px] text-center text-[10px] font-semibold uppercase tracking-wide leading-tight ${r.cls}`}>
             {r.label}
           </div>
         ))}
@@ -550,7 +550,7 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
                   {ROLE_HEADERS.map(r => {
                     const checked = Boolean(matrix[r.key]?.[item.key]);
                     return (
-                      <div key={r.key} className="w-12 flex justify-center shrink-0">
+                      <div key={r.key} className="w-[76px] flex justify-center shrink-0">
                         <button
                           onClick={() => toggle(r.key, item.key)}
                           className={`w-9 h-5 rounded-full transition-colors relative ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
