@@ -102,6 +102,9 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           </button>
         </div>
 
+        {/* User profile (top, expands downward inline) */}
+        <UserProfileWidget />
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-5 custom-scrollbar">
           {/* Main */}
@@ -125,8 +128,6 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
           </div>
         </div>
 
-        {/* Footer with user profile */}
-        <UserProfileWidget />
       </aside>
     </>
   );
