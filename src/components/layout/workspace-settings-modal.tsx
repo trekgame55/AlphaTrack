@@ -158,14 +158,14 @@ export function WorkspaceSettingsModal({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
       <div
-        className="bg-[#0f0f0f] border border-border rounded-2xl w-full max-w-3xl h-[600px] max-h-[90vh] shadow-2xl overflow-hidden flex"
+        className="bg-[#0f0f0f] border border-border rounded-2xl w-full max-w-3xl h-[90vh] sm:h-[600px] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col sm:flex-row"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sidebar tabs */}
-        <div className="w-[200px] bg-[#0a0a0a] border-r border-border/60 flex flex-col p-3 gap-1 shrink-0">
-          <div className="px-2 py-2 mb-1">
+        {/* Sidebar tabs (left on desktop, top on mobile) */}
+        <div className="sm:w-[200px] bg-[#0a0a0a] border-b sm:border-b-0 sm:border-r border-border/60 flex sm:flex-col p-2 sm:p-3 gap-1 shrink-0 overflow-x-auto sm:overflow-x-visible">
+          <div className="hidden sm:block px-2 py-2 mb-1">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">Пространство</div>
             <div className="text-sm font-medium text-foreground truncate">{workspaceName}</div>
           </div>
@@ -175,7 +175,7 @@ export function WorkspaceSettingsModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div className="h-12 flex items-center justify-between px-5 border-b border-border/60 shrink-0">
             <h2 className="text-sm font-semibold text-foreground">
               {tab === "general"  && "Общие настройки"}
@@ -382,7 +382,7 @@ function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-2.5 w-full text-left px-2.5 py-2 rounded-lg text-sm transition-colors ${
+      className={`flex items-center gap-2 sm:gap-2.5 shrink-0 sm:w-full text-left px-3 sm:px-2.5 py-2 rounded-lg text-sm transition-colors ${
         active ? "bg-primary/15 text-primary font-medium" : "text-muted-foreground hover:text-white hover:bg-white/5"
       }`}
     >
@@ -520,52 +520,53 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border/60">
-              <th className="text-left py-2 px-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider w-[55%]">Право</th>
-              {ROLE_HEADERS.map(r => (
-                <th key={r.key} className={`text-center py-2 px-2 text-[11px] font-semibold uppercase tracking-wider ${r.cls}`}>
-                  {r.label}
-                </th>
+      {/* Header — sticky role labels */}
+      <div className="sticky top-0 bg-[#0f0f0f] z-10 flex items-center gap-2 pb-2 border-b border-border/60">
+        <div className="flex-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Право</div>
+        {ROLE_HEADERS.map(r => (
+          <div key={r.key} className={`w-12 text-center text-[10px] font-semibold uppercase tracking-wider ${r.cls}`}>
+            {r.label}
+          </div>
+        ))}
+      </div>
+
+      {/* Permission groups */}
+      <div className="flex flex-col gap-4">
+        {PERM_GROUPS.map((group, gi) => (
+          <div key={gi} className="flex flex-col">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold mb-1 px-1">
+              {group.title}
+            </div>
+            <div className="flex flex-col rounded-xl border border-border/40 overflow-hidden">
+              {group.items.map((item, ii) => (
+                <div
+                  key={item.key}
+                  className={`flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.02] ${ii > 0 ? "border-t border-border/30" : ""}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-foreground text-[13px] leading-tight truncate">{item.label}</div>
+                    {item.hint && <div className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{item.hint}</div>}
+                  </div>
+                  {ROLE_HEADERS.map(r => {
+                    const checked = Boolean(matrix[r.key]?.[item.key]);
+                    return (
+                      <div key={r.key} className="w-12 flex justify-center shrink-0">
+                        <button
+                          onClick={() => toggle(r.key, item.key)}
+                          className={`w-9 h-5 rounded-full transition-colors relative ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
+                          aria-pressed={checked}
+                          title={`${r.label}: ${item.label}`}
+                        >
+                          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {PERM_GROUPS.map((group, gi) => (
-              <React.Fragment key={`g-${gi}`}>
-                <tr>
-                  <td colSpan={1 + ROLE_HEADERS.length} className="pt-4 pb-1 px-2 text-[10px] uppercase tracking-wider text-muted-foreground/80 font-bold">
-                    {group.title}
-                  </td>
-                </tr>
-                {group.items.map(item => (
-                  <tr key={item.key} className="border-b border-border/30 hover:bg-white/[0.02]">
-                    <td className="py-2 px-2">
-                      <div className="text-foreground text-[13px] leading-tight">{item.label}</div>
-                      {item.hint && <div className="text-[11px] text-muted-foreground mt-0.5">{item.hint}</div>}
-                    </td>
-                    {ROLE_HEADERS.map(r => {
-                      const checked = Boolean(matrix[r.key]?.[item.key]);
-                      return (
-                        <td key={r.key} className="py-2 px-2 text-center">
-                          <button
-                            onClick={() => toggle(r.key, item.key)}
-                            className={`w-9 h-5 rounded-full transition-colors relative ${checked ? "bg-primary" : "bg-secondary border border-border"}`}
-                            aria-pressed={checked}
-                          >
-                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+            </div>
+          </div>
+        ))}
       </div>
 
       {error && (
