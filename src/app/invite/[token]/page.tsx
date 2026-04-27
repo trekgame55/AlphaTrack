@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { joinWorkspaceByToken } from "@/actions/workspace";
 
-export default function InvitePage({ params }: { params: { token: string } }) {
+// In Next.js 15+ `params` is a Promise that must be unwrapped with React.use().
+export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
   const router = useRouter();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
     async function join() {
-      const result = await joinWorkspaceByToken(params.token);
+      const result = await joinWorkspaceByToken(token);
       if ("error" in result) {
+        // Not logged in → redirect to login with invite token preserved
+        if ((result.error as string)?.toLowerCase().includes("войдите")) {
+          router.replace(`/login?invite=${encodeURIComponent(token)}`);
+          return;
+        }
         setStatus("error");
         setMessage(result.error as string);
       } else {
@@ -21,7 +28,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
       }
     }
     join();
-  }, [params.token, router]);
+  }, [token, router]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4">
@@ -32,7 +39,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
             <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
           </svg>
         </div>
-        <h1 className="text-xl font-bold text-foreground mb-2">FlowDesk</h1>
+        <h1 className="text-xl font-bold text-foreground mb-2">AlphaTrack</h1>
 
         {status === "loading" && (
           <div>

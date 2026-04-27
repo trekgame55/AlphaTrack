@@ -10,13 +10,17 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ChevronDown, ChevronRight, Plus, MoreHorizontal, Flag, GripVertical, Trash2,
+  ChevronDown, ChevronRight, Plus, Flag, GripVertical,
 } from "lucide-react";
 import { useWorkspace } from "@/lib/workspace-context";
 import { listTasks, createTask, updateTask, deleteTask } from "@/actions/tasks";
 import { TaskModal } from "@/components/task-modal";
 import { canCompleteTask } from "@/lib/permissions";
 import { Task, Priority, CURRENT_USER_ID } from "@/lib/mock-data";
+import { statusClasses } from "@/lib/statuses";
+
+// Status accent for the right-edge neon strip on each row.
+const statusGlow = (id: string) => statusClasses(id)?.glow ?? "bg-border";
 
 // ─── Priority display ────────────────────────────────────────────────────────
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -133,8 +137,17 @@ function TaskRow({ task, onOpen, onToggleDone, onDelete, onUpdateDate, overlay }
         </div>
       </div>
 
+      {/* Tags */}
+      <div className="w-[110px] shrink-0 hidden 2xl:flex items-center gap-1 overflow-hidden">
+        {task.tags.slice(0, 2).map((tag) => (
+          <span key={tag.id} className={`text-[10px] px-1.5 py-px rounded-full ${tag.color} truncate`}>
+            {tag.label}
+          </span>
+        ))}
+      </div>
+
       {/* Due Date */}
-      <div className="w-[75px] shrink-0 hidden xl:block text-xs text-muted-foreground relative">
+      <div className="w-[75px] shrink-0 hidden xl:block text-xs text-muted-foreground relative pr-3">
         <span className="cursor-pointer hover:text-primary transition-colors">
           {task.dueDate ? new Date(task.dueDate).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }) : <span className="opacity-40">+ дата</span>}
         </span>
@@ -148,26 +161,11 @@ function TaskRow({ task, onOpen, onToggleDone, onDelete, onUpdateDate, overlay }
         />
       </div>
 
-      {/* Tags on hover */}
-      <div className="absolute right-10 opacity-0 group-hover/task:opacity-100 flex items-center gap-1 transition-opacity pointer-events-none">
-        {task.tags.slice(0, 2).map((tag) => (
-          <span key={tag.id} className={`text-[10px] px-1.5 py-px rounded-full ${tag.color}`}>{tag.label}</span>
-        ))}
-      </div>
-
-      {/* Actions on hover */}
-      <div className="absolute right-2 opacity-0 group-hover/task:opacity-100 bg-secondary/90 backdrop-blur rounded p-1 flex items-center gap-1 transition-opacity">
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete?.(task.id); }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-red-400"
-          title="Удалить задачу"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-        <button onClick={(e) => e.stopPropagation()} className="w-6 h-6 flex items-center justify-center rounded hover:bg-background text-muted-foreground hover:text-foreground">
-          <MoreHorizontal className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {/* Right-edge neon status indicator */}
+      <span
+        className={`pointer-events-none absolute right-0 top-1.5 bottom-1.5 w-[2px] rounded-full ${statusGlow(task.status)}`}
+        aria-hidden
+      />
     </div>
   );
 }
@@ -220,8 +218,9 @@ export default function TasksPage() {
           id: t.id, title: t.title,
           description: t.description ?? undefined,
           status: t.status as any, priority: t.priority as any,
-          startDate: t.startDate ? new Date(t.startDate).toISOString().split("T")[0] : undefined,
-          dueDate:   t.dueDate   ? new Date(t.dueDate).toISOString().split("T")[0]   : undefined,
+          // take first 10 chars instead of new Date(...).toISOString() — that shifts by TZ
+          startDate: t.startDate ? String(t.startDate).slice(0, 10) : undefined,
+          dueDate:   t.dueDate   ? String(t.dueDate).slice(0, 10)   : undefined,
           group: (t.group || "No date") as any,
           projectId:    t.project?.id    || wsId,
           projectName:  t.project?.name  || workspace.name,
@@ -283,8 +282,26 @@ export default function TasksPage() {
     updateTask(taskId, { dueDate: date });
   };
 
-  const today = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  // Local YYYY-MM-DD (toISOString shifts by TZ offset → date drifts back by a day)
+  const fmtLocal = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+  const today    = fmtLocal(new Date());
+  const tomorrow = fmtLocal(new Date(Date.now() + 86400000));
+
+  // Derive the effective group for a task from its dueDate. The persisted
+  // `group` field is only used as a fallback when there is no dueDate, so a
+  // task whose dueDate is changed to today automatically appears in "Today".
+  const effectiveGroup = (t: Task): GroupKey => {
+    const due = t.dueDate ? String(t.dueDate).slice(0, 10) : "";
+    if (!due) return (t.group as GroupKey) || "No date";
+    if (due === today)    return "Today";
+    if (due === tomorrow) return "Tomorrow";
+    return "Later";
+  };
 
   const addTask = async (group: GroupKey) => {
     if (!newTaskTitle.trim()) { setAddingToGroup(null); return; }
@@ -386,9 +403,16 @@ export default function TasksPage() {
           return result;
         });
       }
-    } else if (aTask.group !== targetGroup) {
-      setTasks((prev) => prev.map((t) => t.id === aTask.id ? { ...t, group: targetGroup } : t));
-      updateTask(aTask.id, { group: targetGroup });
+    } else if (effectiveGroup(aTask) !== targetGroup) {
+      // Moving between groups updates both the explicit group and the dueDate so
+      // the task lands in the visually expected bucket (Today/Tomorrow/Later/No date).
+      let newDue: string | undefined = aTask.dueDate;
+      if (targetGroup === "Today")    newDue = today;
+      else if (targetGroup === "Tomorrow") newDue = tomorrow;
+      else if (targetGroup === "No date")  newDue = undefined;
+      // For "Later" we keep whatever date the user already had.
+      setTasks((prev) => prev.map((t) => t.id === aTask.id ? { ...t, group: targetGroup, dueDate: newDue } : t));
+      updateTask(aTask.id, { group: targetGroup, dueDate: newDue ?? null } as any);
     }
   };
 
@@ -418,7 +442,7 @@ export default function TasksPage() {
             </div>
           ) : (
             GROUPS.map((group) => {
-              const groupTasks = visibleTasks.filter((t) => t.group === group);
+              const groupTasks = visibleTasks.filter((t) => effectiveGroup(t) === group);
               if (groupTasks.length === 0 && group !== "Today") return null;
               const isExpanded = expandedGroups[group];
 

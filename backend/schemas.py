@@ -1,21 +1,25 @@
-"""
-Pydantic schemas for request/response validation
-"""
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 
 
-# ─── Auth ─────────────────────────────────────────────────────────────────────
-
 class RegisterRequest(BaseModel):
     name: str
     email: str
     password: str
+    invite_token: Optional[str] = None
 
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+class UpdateProfileRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 class UserOut(BaseModel):
     id: str
@@ -28,9 +32,6 @@ class UserOut(BaseModel):
 class SessionOut(BaseModel):
     token: str
     user: UserOut
-
-
-# ─── Workspace ────────────────────────────────────────────────────────────────
 
 class MemberOut(BaseModel):
     id: str
@@ -56,9 +57,6 @@ class WorkspaceShort(BaseModel):
     slug: str
     model_config = {"from_attributes": True}
 
-
-# ─── Tags ─────────────────────────────────────────────────────────────────────
-
 class TagCreate(BaseModel):
     label: str
     color: str = "bg-purple-500/20 text-purple-400"
@@ -68,9 +66,6 @@ class TagOut(BaseModel):
     label: str
     color: str
     model_config = {"from_attributes": True}
-
-
-# ─── Tasks ────────────────────────────────────────────────────────────────────
 
 class CommentAuthorOut(BaseModel):
     id: str
@@ -152,9 +147,6 @@ class TaskUpdate(BaseModel):
 class CommentCreate(BaseModel):
     text: str
 
-
-# ─── Contacts ─────────────────────────────────────────────────────────────────
-
 class PhoneIn(BaseModel):
     label: str
     number: str
@@ -186,9 +178,6 @@ class ContactOut(BaseModel):
     createdAt: datetime
     model_config = {"from_attributes": True}
 
-
-# ─── Documents ────────────────────────────────────────────────────────────────
-
 class DocumentCreate(BaseModel):
     title: str = "Без названия"
     content: str = ""
@@ -210,11 +199,23 @@ class DocumentOut(BaseModel):
     updatedAt: datetime
     model_config = {"from_attributes": True}
 
-
-# ─── Invite ───────────────────────────────────────────────────────────────────
-
 class InviteOut(BaseModel):
     link: str
 
 class AcceptInvite(BaseModel):
     token: str
+
+class GenerateInviteRequest(BaseModel):
+    role: Optional[str] = "viewer"
+
+class InviteInfo(BaseModel):
+    id: str
+    token: str
+    role: str
+    expiresAt: datetime
+    usedAt: Optional[datetime] = None
+    createdAt: datetime
+    model_config = {"from_attributes": True}
+
+class MemberRoleUpdate(BaseModel):
+    role: str

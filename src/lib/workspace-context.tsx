@@ -3,8 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { getUserWorkspace, getUserWorkspaces } from "@/actions/workspace";
 import { listContacts, listTags } from "@/actions/contacts";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useStatusStore } from "@/lib/statuses";
 
 export type WsUser = {
   id: string;
@@ -47,8 +46,6 @@ export type Workspace = {
   tags: WsTag[];
 };
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 type WorkspaceCtx = {
   workspace: Workspace | null;
   userWorkspaces: { id: string; name: string; slug: string }[];
@@ -81,8 +78,6 @@ export function useWorkspace() {
   return useContext(WorkspaceContext);
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 export function WorkspaceProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const [workspace,        setWorkspace]        = useState<Workspace | null>(null);
   const [userWorkspaces,   setUserWorkspaces]   = useState<{ id: string; name: string; slug: string }[]>([]);
@@ -94,24 +89,27 @@ export function WorkspaceProvider({ userId, children }: { userId: string; childr
 
   const refresh = useCallback(() => setTick(t => t + 1), []);
 
-  /** Switch workspace — immediately clear stale data */
   const switchWorkspace = useCallback((id: string) => {
     setWorkspace(null);
     setContacts([]);
     setTags([]);
     setActiveWorkspaceId(id);
-    if (typeof window !== "undefined") localStorage.setItem("weeek_active_ws", id);
+    if (typeof window !== "undefined") localStorage.setItem("alphatrack_active_ws", id);
     setTick(t => t + 1);
   }, []);
 
-  // Restore saved workspace on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("weeek_active_ws");
+      const saved = localStorage.getItem("alphatrack_active_ws");
       if (saved) setActiveWorkspaceId(saved);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const hydrateStatuses = useStatusStore((s) => s.hydrate);
+  useEffect(() => {
+    if (activeWorkspaceId) hydrateStatuses(activeWorkspaceId);
+  }, [activeWorkspaceId, hydrateStatuses]);
 
   // Load workspace meta + contacts + tags whenever workspace/tick changes
   useEffect(() => {

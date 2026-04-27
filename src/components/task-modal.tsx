@@ -1,16 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X, Flag, Calendar, Users, Tag, MessageSquare, Activity,
-  CheckSquare, Paperclip, MoreHorizontal, Send, Trash2,
-  ChevronDown, Check, Pencil, Plus, PhoneCall,
+  Paperclip, MoreHorizontal, Send, Trash2,
+  ChevronDown, Check, Pencil, Plus, PhoneCall, AlertCircle,
 } from "lucide-react";
-import { Task, Member, TAGS, Priority, Status, MOCK_CONTACTS, Contact, CURRENT_USER } from "@/lib/mock-data";
+import { Task, Member, TAGS, Priority, Status, MOCK_CONTACTS, Contact } from "@/lib/mock-data";
+import { useAllStatuses, statusClasses } from "@/lib/statuses";
 import { BookUser, Phone, Copy } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { ShareModal } from "@/components/share-modal";
 import { useWorkspace } from "@/lib/workspace-context";
+import { createTag as apiCreateTag, deleteTag as apiDeleteTag } from "@/actions/tags";
+import { addComment as apiAddComment, getTaskActivity } from "@/actions/tasks";
+import type { ActivityDTO } from "@/lib/api";
+import {
+  createContact as apiCreateContact,
+  updateContact as apiUpdateContact,
+  deleteContact as apiDeleteContact,
+} from "@/actions/contacts";
 
 const PRIORITY_LABELS: Record<Priority, { label: string; color: string }> = {
   high:   { label: "Высокий",  color: "text-red-400"          },
@@ -19,13 +28,6 @@ const PRIORITY_LABELS: Record<Priority, { label: string; color: string }> = {
   none:   { label: "Нет",      color: "text-muted-foreground" },
 };
 
-const STATUS_LABELS: Record<Status, { label: string; color: string }> = {
-  backlog:     { label: "Бэклог",   color: "text-slate-400"   },
-  todo:        { label: "К работе", color: "text-blue-400"    },
-  in_progress: { label: "В работе", color: "text-amber-400"   },
-  review:      { label: "Ревью",    color: "text-purple-400"  },
-  done:        { label: "Готово",   color: "text-emerald-400" },
-};
 
 interface TaskModalProps {
   task: Task | null;
@@ -37,7 +39,12 @@ interface TaskModalProps {
 export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps) {
   const [editedTask, setEditedTask] = useState<Task | null>(task);
   const [newComment, setNewComment] = useState("");
+  const [commentError, setCommentError] = useState<string | null>(null);
+  const [sendingComment, setSendingComment] = useState(false);
   const [activeTab, setActiveTab] = useState<"comments" | "activity">("comments");
+  const [activity, setActivity] = useState<ActivityDTO[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityTick, setActivityTick] = useState(0);
   const [editingTitle, setEditingTitle] = useState(false);
   const [assigneePicker, setAssigneePicker] = useState(false);
   const [tagPicker, setTagPicker] = useState(false);
@@ -47,14 +54,24 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
   const [contactSearch, setContactSearch] = useState("");
   const [contactNewName, setContactNewName] = useState("");
   const [contactEditModal, setContactEditModal] = useState<Contact | null | "new">(null);
-  const members = useAppStore((s) => s.members);
-  const { currentUser, contacts: wsContacts } = useWorkspace();
+  const { currentUser, contacts: wsContacts, setContacts: setWsContacts, workspace, tags: wsTags, setTags: setWsTags } = useWorkspace();
+  const allStatuses = useAllStatuses();
 
-  // Merge workspace members with CURRENT_USER so user sees themselves
+  // Pull all real workspace members (everyone who joined the team — including invitees).
+  // Each WsMember wraps a User; we map it to the Member shape used by the picker.
   const allMembers: Member[] = (() => {
-    const base = members.map(m => ({ ...m }));
+    const base: Member[] = (workspace?.members ?? []).map(m => ({
+      id: m.user.id,
+      name: m.user.name,
+      initials: m.user.initials,
+      color: m.user.color,
+      email: m.user.email,
+    }));
     if (currentUser && !base.some(m => m.id === currentUser.id)) {
-      base.unshift({ id: currentUser.id, name: currentUser.name, initials: currentUser.initials, color: currentUser.color, email: currentUser.email });
+      base.unshift({
+        id: currentUser.id, name: currentUser.name,
+        initials: currentUser.initials, color: currentUser.color, email: currentUser.email,
+      });
     }
     return base;
   })();
@@ -68,18 +85,61 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
     const updated = { ...editedTask, ...patch };
     setEditedTask(updated);
     onUpdate?.(updated);
+    // Any meta change is server-logged → refresh history shortly after the PUT lands.
+    setTimeout(() => setActivityTick(t => t + 1), 400);
   };
 
-  const handleSendComment = () => {
-    if (!newComment.trim()) return;
-    const comment = {
-      id: `c-${Date.now()}`,
-      author: CURRENT_USER,
-      text: newComment.trim(),
-      createdAt: "Только что",
+  const handleSendComment = async () => {
+    const text = newComment.trim();
+    if (!text || !editedTask || sendingComment) return;
+    setSendingComment(true);
+    setCommentError(null);
+    const res = await apiAddComment(editedTask.id, text);
+    setSendingComment(false);
+    if ("error" in res) {
+      setCommentError(res.error || "Не удалось отправить комментарий");
+      return;
+    }
+    const c = res.comment!;
+    const localComment = {
+      id: c.id,
+      text: c.text,
+      createdAt: c.createdAt,
+      author: {
+        id: c.author.id,
+        name: c.author.name,
+        initials: c.author.initials,
+        color: c.author.color,
+        email: c.author.email,
+      },
     };
-    update({ comments: [...editedTask.comments, comment] });
     setNewComment("");
+    update({ comments: [...(editedTask.comments ?? []), localComment] });
+    setActivityTick(t => t + 1);
+  };
+
+  // Fetch task activity log when the History tab is open or after any local change.
+  useEffect(() => {
+    if (!editedTask?.id || activeTab !== "activity") return;
+    let cancelled = false;
+    setActivityLoading(true);
+    getTaskActivity(editedTask.id).then(res => {
+      if (cancelled) return;
+      if ("items" in res) setActivity(res.items ?? []);
+      setActivityLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [editedTask?.id, activeTab, activityTick]);
+
+  // Format ISO datetime returned by the backend into a friendly localized string.
+  const formatCommentDate = (iso: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      day: "2-digit", month: "short",
+      hour: "2-digit", minute: "2-digit",
+    });
   };
 
   const toggleAssignee = (member: Member) => {
@@ -97,25 +157,49 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
 
   const copyPhone = (num: string) => navigator.clipboard.writeText(num);
 
-  const priorityInfo = PRIORITY_LABELS[editedTask.priority];
-  const statusInfo = STATUS_LABELS[editedTask.status];
+  const priorityInfo = PRIORITY_LABELS[editedTask.priority] ?? PRIORITY_LABELS.none;
+  const statusMeta = allStatuses.find((s) => s.id === editedTask.status);
+  const statusTextColor = statusClasses(editedTask.status)?.text ?? "text-muted-foreground";
+  const statusLabel = statusMeta?.label ?? editedTask.status;
 
-  // Tags logic
+  // Tags logic — uses workspace tags from server (wsTags). Legacy TAGS array is fallback only.
+  const availableTags = wsTags.length > 0 ? wsTags : TAGS;
+
   const toggleTag = (tag: import("@/lib/mock-data").Tag) => {
     const has = editedTask.tags.some((t) => t.id === tag.id);
     update({ tags: has ? editedTask.tags.filter((t) => t.id !== tag.id) : [...editedTask.tags, tag] });
   };
-  const removeTagGlobal = (id: string, e: React.MouseEvent) => {
+  const removeTagGlobal = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const idx = TAGS.findIndex(t => t.id === id);
-    if (idx !== -1) TAGS.splice(idx, 1);
+    // Remove from current task immediately
     update({ tags: editedTask.tags.filter((t) => t.id !== id) });
+    // If this is a real ws tag, delete on server and update workspace context
+    if (wsTags.some(t => t.id === id)) {
+      const res = await apiDeleteTag(id);
+      if ("success" in res && res.success) {
+        setWsTags(wsTags.filter(t => t.id !== id));
+      } else if ("error" in res) {
+        console.error(res.error);
+      }
+    } else {
+      // legacy local tag
+      const idx = TAGS.findIndex(t => t.id === id);
+      if (idx !== -1) TAGS.splice(idx, 1);
+    }
   };
-  const createGlobalTag = (label: string) => {
-    const fresh = { id: `tg-${Date.now()}`, label, color: "bg-primary/20 text-primary" };
-    TAGS.push(fresh);
-    update({ tags: [...editedTask.tags, fresh] });
+  const createGlobalTag = async (label: string) => {
+    if (!workspace?.id) return;
+    const trimmed = label.trim();
+    if (!trimmed) return;
     setNewTagStr("");
+    const res = await apiCreateTag(workspace.id, trimmed, "bg-primary/20 text-primary");
+    if ("error" in res) {
+      console.error(res.error);
+      return;
+    }
+    const tag = { id: res.tag!.id, label: res.tag!.label, color: res.tag!.color };
+    setWsTags([...wsTags, tag]);
+    update({ tags: [...editedTask.tags, tag] });
   };
 
   return (
@@ -214,11 +298,12 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
               <select
                 value={editedTask.status}
                 onChange={(e) => update({ status: e.target.value as Status })}
-                className={`bg-transparent border-none outline-none text-sm font-medium cursor-pointer ${statusInfo.color}`}
+                className={`bg-transparent border-none outline-none text-sm font-medium cursor-pointer ${statusTextColor}`}
+                title={statusLabel}
               >
-                {(Object.keys(STATUS_LABELS) as Status[]).map((s) => (
-                  <option key={s} value={s} className="bg-[#1e1e1e] text-foreground">
-                    {STATUS_LABELS[s].label}
+                {allStatuses.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-[#1e1e1e] text-foreground">
+                    {s.label}
                   </option>
                 ))}
               </select>
@@ -362,7 +447,7 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
                         />
                       </div>
                       <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                        {TAGS.filter(t => t.label.toLowerCase().includes(newTagStr.toLowerCase())).map((t) => {
+                        {availableTags.filter(t => t.label.toLowerCase().includes(newTagStr.toLowerCase())).map((t) => {
                           const selected = editedTask.tags.some(x => x.id === t.id);
                           return (
                             <div
@@ -528,18 +613,6 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
             />
           </div>
 
-          {/* Checklist */}
-          <div className="px-5 pb-4">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <CheckSquare className="w-3.5 h-3.5" />
-                Чеклист
-              </label>
-              <button className="text-xs text-primary hover:underline">+ Добавить пункт</button>
-            </div>
-            <div className="text-sm text-muted-foreground italic">Пусто — добавьте первый пункт</div>
-          </div>
-
           {/* Attachments */}
           <div className="px-5 pb-4">
             <div className="flex items-center justify-between mb-2">
@@ -591,7 +664,7 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
                     <div className="flex-1 bg-secondary/40 rounded-lg p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold text-foreground">{c.author.name}</span>
-                        <span className="text-xs text-muted-foreground">{c.createdAt}</span>
+                        <span className="text-xs text-muted-foreground">{formatCommentDate(c.createdAt)}</span>
                       </div>
                       <p className="text-sm text-foreground/80">{c.text}</p>
                     </div>
@@ -604,10 +677,52 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
             )}
 
             {activeTab === "activity" && (
-              <div className="pb-6 flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  Задача создана — <span className="text-foreground/60">{editedTask.createdAt}</span>
+              <div className="pb-6">
+                {activityLoading && activity.length === 0 && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                    <div className="w-4 h-4 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
+                    Загрузка истории…
+                  </div>
+                )}
+                {!activityLoading && activity.length === 0 && (
+                  <div className="flex flex-col items-center gap-2 py-8 text-center">
+                    <Activity className="w-8 h-8 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground italic">История изменений пуста</p>
+                    <p className="text-xs text-muted-foreground/60">Все изменения задачи будут отображаться здесь</p>
+                  </div>
+                )}
+                <div className="relative flex flex-col">
+                  {activity.map((a, idx) => {
+                    const u = a.user;
+                    const isLast = idx === activity.length - 1;
+                    return (
+                      <div key={a.id} className="flex gap-3 group/act">
+                        {/* Timeline avatar + line */}
+                        <div className="flex flex-col items-center shrink-0">
+                          <div className={`w-7 h-7 rounded-full ${u?.color ?? "bg-secondary"} flex items-center justify-center text-white text-[10px] font-bold ring-2 ring-[#111111] shrink-0 z-10`}>
+                            {u?.initials ?? "?"}
+                          </div>
+                          {!isLast && (
+                            <div className="w-px flex-1 bg-border/50 mt-1 mb-0 min-h-[12px]" />
+                          )}
+                        </div>
+                        {/* Content */}
+                        <div className={`flex-1 min-w-0 ${isLast ? "pb-0" : "pb-4"}`}>
+                          <div className="bg-secondary/20 border border-border/40 rounded-lg px-3 py-2 group-hover/act:border-border/70 transition-colors">
+                            <div className="flex items-start justify-between gap-2 mb-0.5">
+                              <span className="text-xs font-semibold text-foreground leading-tight">{u?.name ?? "Система"}</span>
+                              <span className="text-[10px] text-muted-foreground/70 shrink-0 leading-tight mt-px">
+                                {formatCommentDate(a.createdAt)}
+                              </span>
+                            </div>
+                            <p className="text-[13px] text-foreground/75 leading-snug">
+                              {describeActivity(a)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -616,21 +731,28 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
 
         {/* Comment Input */}
         <div className="px-5 py-3 border-t border-border shrink-0 bg-[#111111]">
+          {commentError && (
+            <div className="mb-2 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">{commentError}</span>
+            </div>
+          )}
           <div className="flex items-center gap-2">
-            <div className={`w-7 h-7 rounded-full ${CURRENT_USER.color} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}>
-              {CURRENT_USER.initials}
+            <div className={`w-7 h-7 rounded-full ${currentUser?.color ?? "bg-violet-500"} flex items-center justify-center text-white text-[11px] font-bold shrink-0`}>
+              {currentUser?.initials ?? "?"}
             </div>
             <div className="flex-1 flex items-center gap-2 bg-secondary/50 border border-border hover:border-primary/50 focus-within:border-primary rounded-lg px-3 py-2 transition-colors">
               <input
                 className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
                 placeholder="Напишите комментарий..."
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSendComment()}
+                onChange={(e) => { setNewComment(e.target.value); if (commentError) setCommentError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                disabled={sendingComment}
               />
               <button
                 onClick={handleSendComment}
-                disabled={!newComment.trim()}
+                disabled={!newComment.trim() || sendingComment}
                 className="text-primary disabled:text-muted-foreground transition-colors"
               >
                 <Send className="w-4 h-4" />
@@ -663,23 +785,69 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
         <ContactFormModal
           initial={contactEditModal === "new" ? { firstName: contactNewName.split(" ")[0] || "", lastName: contactNewName.split(" ").slice(1).join(" ") || "" } : contactEditModal}
           isNew={contactEditModal === "new"}
-          onSave={(c) => {
+          onSave={async (c) => {
             if (contactEditModal === "new") {
-              MOCK_CONTACTS.push(c);
-              update({ contactId: c.id });
+              if (!workspace?.id) return;
+              const res = await apiCreateContact(workspace.id, {
+                firstName: c.firstName,
+                lastName: c.lastName,
+                company: c.company || undefined,
+                email: c.email || undefined,
+                color: c.color,
+                phones: c.phones,
+              });
+              if ("error" in res) {
+                console.error("[task-modal] createContact failed:", res.error);
+                alert("Ошибка создания контакта: " + res.error);
+                return;
+              }
+              const created = res.contact as any;
+              if (created) {
+                setWsContacts([created, ...wsContacts]);
+                update({ contactId: created.id });
+              }
+              setContactEditModal(null);
+              return;
             } else {
-              const idx = MOCK_CONTACTS.findIndex(x => x.id === c.id);
-              if (idx !== -1) MOCK_CONTACTS[idx] = c;
-              // if this contact is selected, trigger re-render
+              // Update existing contact on backend if it belongs to the workspace
+              const isWsContact = wsContacts.some((x: any) => x.id === c.id);
+              if (isWsContact) {
+                setWsContacts(wsContacts.map((x: any) => (x.id === c.id ? c : x)) as any);
+                const res = await apiUpdateContact(c.id, {
+                  firstName: c.firstName,
+                  lastName: c.lastName,
+                  company: c.company || undefined,
+                  email: c.email || undefined,
+                  phones: c.phones,
+                });
+                if ((res as any)?.error) {
+                  console.error("[task-modal] updateContact failed:", (res as any).error);
+                  alert("Ошибка обновления контакта: " + (res as any).error);
+                }
+              } else {
+                // Legacy / mock fallback
+                const idx = MOCK_CONTACTS.findIndex(x => x.id === c.id);
+                if (idx !== -1) MOCK_CONTACTS[idx] = c;
+              }
               if (editedTask.contactId === c.id) update({ contactId: c.id });
             }
             setContactEditModal(null);
           }}
           onClose={() => setContactEditModal(null)}
-          onDelete={contactEditModal !== "new" ? () => {
+          onDelete={contactEditModal !== "new" ? async () => {
             const id = (contactEditModal as Contact).id;
-            const idx = MOCK_CONTACTS.findIndex(x => x.id === id);
-            if (idx !== -1) MOCK_CONTACTS.splice(idx, 1);
+            const isWsContact = wsContacts.some((x: any) => x.id === id);
+            if (isWsContact) {
+              setWsContacts(wsContacts.filter((x: any) => x.id !== id) as any);
+              const res = await apiDeleteContact(id);
+              if ((res as any)?.error) {
+                console.error("[task-modal] deleteContact failed:", (res as any).error);
+                alert("Ошибка удаления контакта: " + (res as any).error);
+              }
+            } else {
+              const idx = MOCK_CONTACTS.findIndex(x => x.id === id);
+              if (idx !== -1) MOCK_CONTACTS.splice(idx, 1);
+            }
             if (editedTask.contactId === id) update({ contactId: undefined });
             setContactEditModal(null);
           } : undefined}
@@ -687,6 +855,92 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
       )}
     </>
   );
+}
+
+// ─── Activity description helpers ─────────────────────────────────────────────
+
+function describeActivity(a: ActivityDTO): string {
+  const d = a.details ?? {};
+  switch (a.action) {
+    case "created":
+      return `создал(а) задачу «${d.title ?? ""}»`;
+
+    case "title":
+      return `переименовал(а) задачу: «${d.from ?? ""}» → «${d.to ?? ""}»`;
+
+    case "status":
+      return `изменил(а) статус: ${humanStatus(d.from)} → ${humanStatus(d.to)}`;
+
+    case "priority":
+      return `изменил(а) приоритет: ${humanPriority(d.from)} → ${humanPriority(d.to)}`;
+
+    case "description":
+      return d.to
+        ? `обновил(а) описание`
+        : `удалил(а) описание`;
+
+    case "dueDate":
+      return d.to
+        ? `установил(а) дедлайн: ${d.to}`
+        : `убрал(а) дедлайн${d.from ? ` (был ${d.from})` : ""}`;
+
+    case "startDate":
+      return d.to
+        ? `установил(а) дату начала: ${d.to}`
+        : `убрал(а) дату начала`;
+
+    case "group":
+      return `переместил(а) в группу «${d.to ?? ""}»`;
+
+    case "contact":
+      if (!d.to) return `убрал(а) контакт`;
+      return `привязал(а) контакт: ${d.name ?? d.to}`;
+
+    case "assignee_added":
+      return `добавил(а) исполнителя: ${d.name ?? d.userId ?? ""}`;
+
+    case "assignee_removed":
+      return `убрал(а) исполнителя: ${d.name ?? d.userId ?? ""}`;
+
+    case "tag_added":
+      return `добавил(а) тег: ${d.label ?? d.tagId ?? ""}`;
+
+    case "tag_removed":
+      return `убрал(а) тег: ${d.label ?? d.tagId ?? ""}`;
+
+    case "comment_added":
+      return d.preview
+        ? `оставил(а) комментарий: «${d.preview}${d.preview.length >= 120 ? "…" : ""}»`
+        : `добавил(а) комментарий`;
+
+    default:
+      return a.action;
+  }
+}
+
+function humanStatus(s: string | null | undefined): string {
+  if (!s) return "—";
+  const map: Record<string, string> = {
+    todo:        "К выполнению",
+    "in-progress": "В работе",
+    in_progress: "В работе",
+    done:        "Готово",
+    cancelled:   "Отменено",
+    backlog:     "Бэклог",
+    review:      "На проверке",
+  };
+  return map[s] ?? s;
+}
+
+function humanPriority(p: string | null | undefined): string {
+  if (!p) return "—";
+  const map: Record<string, string> = {
+    high:   "Высокий",
+    medium: "Средний",
+    low:    "Низкий",
+    none:   "Нет",
+  };
+  return map[p] ?? p;
 }
 
 function MetaRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {

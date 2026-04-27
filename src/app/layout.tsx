@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Weeek Clone",
+  title: "AlphaTrack",
   description: "Task management SaaS clone",
 };
 

@@ -150,7 +150,7 @@ function ContactModal({
             <input
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="FlowDesk Ltd"
+              placeholder="AlphaTrack Ltd"
               className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
             />
           </div>
@@ -375,18 +375,30 @@ export default function ContactsPage() {
     if (exists) {
       // Optimistic update
       setContacts(wsContacts.map(p => p.id === c.id ? c : p));
-      await updateContactAction(c.id, {
+      const res = await updateContactAction(c.id, {
         firstName: c.firstName, lastName: c.lastName,
         company: c.company ?? undefined, email: c.email ?? undefined,
         phones: c.phones,
       });
+      if ((res as any)?.error) {
+        console.error("[contacts] update failed:", (res as any).error);
+        alert("Ошибка обновления: " + (res as any).error);
+        return;
+      }
+      setModal(null);
     } else {
-      const { contact: created } = await createContact(workspace.id, {
+      const res = await createContact(workspace.id, {
         firstName: c.firstName, lastName: c.lastName,
         company: c.company ?? undefined, email: c.email ?? undefined,
         color: c.color, phones: c.phones,
       });
-      if (created) setContacts([created as WsContact, ...wsContacts]);
+      if ("error" in res) {
+        console.error("[contacts] create failed:", res.error);
+        alert("Ошибка создания: " + res.error);
+        return;
+      }
+      if (res.contact) setContacts([res.contact as unknown as WsContact, ...wsContacts]);
+      setModal(null);
     }
   };
 

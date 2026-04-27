@@ -9,7 +9,6 @@ import {
 
 const NAV_ITEMS = [
   { href: "/tasks",     icon: CheckCircle2, label: "Задачи"   },
-  { href: "/all-tasks", icon: ListTodo,     label: "Все"      },
   { href: "/week",      icon: CalendarDays, label: "Неделя"   },
   { href: "/board",     icon: Kanban,       label: "Доска"    },
   { href: "/contacts",  icon: BookUser,     label: "Контакты" },

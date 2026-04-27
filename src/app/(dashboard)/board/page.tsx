@@ -1,11 +1,23 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Plus, MoreHorizontal, Flag, GripVertical } from "lucide-react";
-import { Task, Priority, Status, CURRENT_USER } from "@/lib/mock-data";
+import { useState, useEffect, useRef } from "react";
+import { Plus, MoreHorizontal, Flag, GripVertical, X, Check, Trash2, Pencil } from "lucide-react";
+import { Task, Priority } from "@/lib/mock-data";
 import { TaskModal } from "@/components/task-modal";
 import { useAppStore } from "@/lib/store";
+import {
+  useAllStatuses, useStatusStore, STATUS_COLOR_CLASSES, STATUS_COLOR_NAMES,
+  type StatusColor, type StatusMeta,
+} from "@/lib/statuses";
 import { getTaskAccess } from "@/lib/permissions";
+import {
+  listTasks,
+  createTask as apiCreateTask,
+  updateTask as apiUpdateTask,
+  deleteTask as apiDeleteTask,
+} from "@/actions/tasks";
+import { useWorkspace } from "@/lib/workspace-context";
+import { dtoToTask } from "@/lib/task-adapter";
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   high:   "text-red-400",
@@ -14,49 +26,161 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   none:   "text-transparent",
 };
 
-type Column = {
-  id: Status;
-  label: string;
-  accent: string;
-  bg: string;
-};
-
-const COLUMNS: Column[] = [
-  { id: "backlog",     label: "Бэклог",    accent: "bg-slate-400",   bg: "bg-slate-400/10"   },
-  { id: "todo",        label: "К работе",  accent: "bg-blue-400",    bg: "bg-blue-400/10"    },
-  { id: "in_progress", label: "В работе",  accent: "bg-amber-400",   bg: "bg-amber-400/10"   },
-  { id: "review",      label: "Ревью",     accent: "bg-purple-400",  bg: "bg-purple-400/10"  },
-  { id: "done",        label: "Готово",    accent: "bg-emerald-400", bg: "bg-emerald-400/10" },
-];
 
 export default function BoardPage() {
   const tasks = useAppStore((s) => s.tasks).filter((t) => getTaskAccess(t) !== "none");
   const projects = useAppStore((s) => s.projects);
+  const setTasks = useAppStore((s) => s.setTasks);
   const addTask = useAppStore((s) => s.addTask);
   const updateTask = useAppStore((s) => s.updateTask);
   const deleteTask = useAppStore((s) => s.deleteTask);
 
+  const { workspace } = useWorkspace();
+  const allStatuses = useAllStatuses();
+  const removeStatus = useStatusStore((s) => s.remove);
+  const renameStatus = useStatusStore((s) => s.rename);
+  const recolorStatus = useStatusStore((s) => s.recolor);
+  const [statusModal, setStatusModal] = useState<null | { editing?: StatusMeta }>(null);
+
+  // Load tasks from backend on mount / workspace change
+  useEffect(() => {
+    if (!workspace?.id) return;
+    let cancelled = false;
+    const wsCtx = { id: workspace.id, name: workspace.name };
+    listTasks(workspace.id).then((dtos) => {
+      if (cancelled) return;
+      setTasks(dtos.map((d) => dtoToTask(d, wsCtx)));
+    });
+    return () => { cancelled = true; };
+  }, [workspace?.id, setTasks]);
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dragOverCol, setDragOverCol] = useState<Status | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-  const handleAddTask = (status: Status) => {
-    const newTask: Task = {
-      id: `T-${Date.now().toString().slice(-4)}`,
-      title: "Новая задача",
-      status: status,
-      priority: "none",
-      projectId: projects[0]?.id || "",
-      projectName: projects[0]?.name || "Нет проекта",
-      projectColor: projects[0]?.color || "bg-secondary",
-      assignees: [],
-      tags: [],
-      comments: [],
-      createdAt: new Date().toISOString().split("T")[0],
-      group: "No date",
+  // ── Space + Left-Mouse drag-to-scroll ────────────────────────────────────────
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const panRef = useRef<{ active: boolean; startX: number; startScroll: number }>({
+    active: false, startX: 0, startScroll: 0,
+  });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        // Don't hijack space when typing in inputs/textareas/contenteditable
+        const tgt = e.target as HTMLElement | null;
+        if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA" || tgt.isContentEditable)) return;
+        if (!spaceHeld) setSpaceHeld(true);
+        e.preventDefault(); // stop page scroll
+      }
     };
-    addTask(newTask);
-    setSelectedTask(newTask);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        setSpaceHeld(false);
+        panRef.current.active = false;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [spaceHeld]);
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!panRef.current.active || !scrollerRef.current) return;
+      const dx = e.clientX - panRef.current.startX;
+      // Drag left  (dx<0) → scroll right (scrollLeft increases).
+      // Drag right (dx>0) → scroll left  (scrollLeft decreases).
+      scrollerRef.current.scrollLeft = panRef.current.startScroll - dx;
+    };
+    const onMouseUp = () => { panRef.current.active = false; };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const onScrollerMouseDown = (e: React.MouseEvent) => {
+    if (!spaceHeld || e.button !== 0 || !scrollerRef.current) return;
+    panRef.current = {
+      active: true,
+      startX: e.clientX,
+      startScroll: scrollerRef.current.scrollLeft,
+    };
+    e.preventDefault();
+  };
+
+  // Close column menu on outside click / Escape
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = () => setOpenMenuId(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenuId]);
+
+  const handleAddTask = async (status: string) => {
+    if (!workspace?.id) return;
+    const res = await apiCreateTask({
+      title: "Новая задача",
+      workspaceId: workspace.id,
+      group: "No date",
+      projectId: projects[0]?.id || undefined,
+    });
+    if ("error" in res) {
+      console.error(res.error);
+      return;
+    }
+    const wsCtx = workspace ? { id: workspace.id, name: workspace.name } : undefined;
+    const task = dtoToTask(res.task, wsCtx);
+    // Set initial status to chosen column (server stores default "todo" — patch up)
+    if (task.status !== status) {
+      const upd = await apiUpdateTask(task.id, { status });
+      if ("task" in upd && upd.task) {
+        const fresh = dtoToTask(upd.task, wsCtx);
+        addTask(fresh);
+        setSelectedTask(fresh);
+        return;
+      }
+      task.status = status;
+    }
+    addTask(task);
+    setSelectedTask(task);
+  };
+
+  const handleUpdateTask = async (updated: Task) => {
+    updateTask(updated);
+    const res = await apiUpdateTask(updated.id, {
+      title: updated.title,
+      description: updated.description,
+      status: updated.status,
+      priority: updated.priority,
+      dueDate: updated.dueDate ?? null,
+      startDate: updated.startDate ?? null,
+      group: updated.group,
+      contactId: updated.contactId ?? null,
+      assigneeIds: updated.assignees.map((a) => a.id),
+      tagIds: updated.tags.map((t) => t.id),
+    });
+    if ("task" in res && res.task) updateTask(dtoToTask(res.task, workspace ? { id: workspace.id, name: workspace.name } : undefined));
+    else if ("error" in res) console.error(res.error);
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    const res = await apiDeleteTask(id);
+    if ("success" in res && res.success) deleteTask(id);
+    else if ("error" in res) console.error(res.error);
   };
 
   // Drag handlers
@@ -65,25 +189,41 @@ export default function BoardPage() {
     if (draggingId && dragOverCol) {
       const t = tasks.find(x => x.id === draggingId);
       if (t && t.status !== dragOverCol) {
-        updateTask({ ...t, status: dragOverCol });
+        handleUpdateTask({ ...t, status: dragOverCol });
       }
     }
     setDraggingId(null);
     setDragOverCol(null);
   };
-  const handleDragOver = (colId: Status, e: React.DragEvent) => {
+  const handleDragOver = (colId: string, e: React.DragEvent) => {
     e.preventDefault();
     setDragOverCol(colId);
+  };
+
+  const handleDeleteStatus = async (statusId: string) => {
+    // Migrate to first remaining status (anything except the one being removed)
+    const fallback = allStatuses.find((s) => s.id !== statusId)?.id;
+    if (!fallback) return;
+    const affected = tasks.filter((t) => t.status === statusId);
+    for (const t of affected) {
+      await handleUpdateTask({ ...t, status: fallback });
+    }
+    removeStatus(statusId);
   };
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">
       {/* Desktop: horizontal scroll board */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div
+        ref={scrollerRef}
+        onMouseDown={onScrollerMouseDown}
+        className={`flex-1 overflow-x-auto overflow-y-hidden ${spaceHeld ? (panRef.current.active ? "cursor-grabbing select-none" : "cursor-grab select-none") : ""}`}
+      >
         <div className="flex gap-3 h-full pb-2 min-w-max">
-          {COLUMNS.map((col) => {
+          {allStatuses.map((col) => {
             const colTasks = tasks.filter((t) => t.status === col.id);
             const isOver = dragOverCol === col.id;
+            const colorClasses = STATUS_COLOR_CLASSES[col.color];
 
             return (
               <div
@@ -97,14 +237,53 @@ export default function BoardPage() {
               >
                 {/* Column Header */}
                 <div className="flex items-center justify-between px-3.5 py-3 border-b border-border shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${col.accent}`} />
-                    <span className="text-sm font-semibold text-foreground">{col.label}</span>
-                    <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{colTasks.length}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${colorClasses.accent}`} />
+                    <span className="text-sm font-semibold text-foreground truncate">{col.label}</span>
+                    <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full shrink-0">{colTasks.length}</span>
                   </div>
-                  <button className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === col.id ? null : col.id);
+                      }}
+                      className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                      title="Меню"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {openMenuId === col.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-full mt-1 w-44 bg-[#1a1a1a] border border-border rounded-xl shadow-2xl z-20 py-1 animate-in fade-in zoom-in-95 duration-100"
+                      >
+                        <button
+                          onClick={() => { setOpenMenuId(null); setStatusModal({ editing: col }); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-secondary/50 transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          Переименовать
+                        </button>
+                        <button
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            if (allStatuses.length <= 1) {
+                              alert("Нельзя удалить последнюю колонку.");
+                              return;
+                            }
+                            if (confirm(`Удалить статус «${col.label}»? Задачи будут перенесены в «К работе».`)) {
+                              handleDeleteStatus(col.id);
+                            }
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-400/10 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Удалить
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Cards */}
@@ -137,12 +316,32 @@ export default function BoardPage() {
           })}
 
           {/* Add column */}
-          <button className="flex flex-col items-center justify-center w-[220px] h-fit mt-0 border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-6 text-muted-foreground hover:text-primary transition-colors">
+          <button
+            onClick={() => setStatusModal({})}
+            className="flex flex-col items-center justify-center w-[220px] h-fit mt-0 border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-6 text-muted-foreground hover:text-primary transition-colors"
+          >
             <Plus className="w-5 h-5 mb-1.5" />
             <span className="text-sm font-medium">Новая колонка</span>
           </button>
         </div>
       </div>
+
+      {/* Status create / edit modal */}
+      {statusModal && (
+        <StatusModal
+          editing={statusModal.editing}
+          onClose={() => setStatusModal(null)}
+          onSave={(label, color) => {
+            if (statusModal.editing) {
+              renameStatus(statusModal.editing.id, label);
+              recolorStatus(statusModal.editing.id, color);
+            } else {
+              useStatusStore.getState().add(label, color);
+            }
+            setStatusModal(null);
+          }}
+        />
+      )}
 
       {/* Task Modal */}
       {selectedTask && (
@@ -150,15 +349,92 @@ export default function BoardPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdate={(updated) => {
-            updateTask(updated);
+            handleUpdateTask(updated);
             setSelectedTask(updated);
           }}
           onDelete={(id) => {
-            deleteTask(id);
+            handleDeleteTask(id);
             setSelectedTask(null);
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Status create / edit modal ───────────────────────────────────────────────
+
+interface StatusModalProps {
+  editing?: StatusMeta;
+  onClose: () => void;
+  onSave: (label: string, color: StatusColor) => void;
+}
+
+function StatusModal({ editing, onClose, onSave }: StatusModalProps) {
+  const [label, setLabel] = useState(editing?.label ?? "");
+  const [color, setColor] = useState<StatusColor>(editing?.color ?? "blue");
+
+  const valid = label.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-[#111111] border border-border rounded-2xl w-full max-w-sm p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-foreground">
+            {editing ? "Изменить статус" : "Новый статус"}
+          </h3>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <label className="text-xs text-muted-foreground mb-1 block">Название</label>
+        <input
+          autoFocus
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Например: На уточнении"
+          className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary mb-3"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && valid) onSave(label.trim(), color);
+            if (e.key === "Escape") onClose();
+          }}
+        />
+
+        <label className="text-xs text-muted-foreground mb-1 block">Цвет</label>
+        <div className="grid grid-cols-5 gap-1.5 mb-4">
+          {STATUS_COLOR_NAMES.map((c) => {
+            const cls = STATUS_COLOR_CLASSES[c.id];
+            const selected = color === c.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setColor(c.id)}
+                title={c.label}
+                className={`relative h-9 rounded-lg ${cls.bg} border transition-all ${
+                  selected ? "border-foreground/60 ring-2 ring-primary/50" : "border-border hover:border-foreground/30"
+                }`}
+              >
+                <span className={`absolute inset-0 m-auto w-3 h-3 rounded-full ${cls.accent}`} />
+                {selected && <Check className="w-3 h-3 absolute top-1 right-1 text-foreground" />}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Отмена
+          </button>
+          <button
+            onClick={() => valid && onSave(label.trim(), color)}
+            disabled={!valid}
+            className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {editing ? "Сохранить" : "Создать"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

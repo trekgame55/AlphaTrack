@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
-from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag
+from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact
 from schemas import TaskCreate, TaskUpdate, TaskOut, CommentCreate, CommentOut
 from deps import get_current_user
 from datetime import datetime, timezone
 import uuid
+import json
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -15,6 +16,26 @@ def _check_member(db, workspace_id: str, user_id: str):
     if not m:
         raise HTTPException(403, "Not a member of this workspace")
     return m
+
+
+def _log(db: Session, task_id: str, user_id: str, action: str, details: dict | None = None):
+    """Append a single change event to the task's activity log."""
+    db.add(Activity(
+        id=str(uuid.uuid4()),
+        taskId=task_id,
+        userId=user_id,
+        action=action,
+        details=json.dumps(details, ensure_ascii=False) if details else None,
+    ))
+
+
+def _date_only(d) -> str | None:
+    """ISO yyyy-mm-dd or None — used to compare/store dates for the activity log."""
+    if not d:
+        return None
+    if isinstance(d, datetime):
+        return d.date().isoformat()
+    return str(d)[:10]
 
 
 def _load_task(db: Session, task_id: str) -> Task:
@@ -69,11 +90,11 @@ def _serialize_task(task: Task) -> dict:
                     "email": a.user.email,
                 }
             }
-            for a in task.assignees
+            for a in task.assignees if a.user is not None
         ],
         "tags": [
             {"tag": {"id": tt.tag.id, "label": tt.tag.label, "color": tt.tag.color}}
-            for tt in task.tags
+            for tt in task.tags if tt.tag is not None
         ],
         "comments": [
             {
@@ -88,7 +109,7 @@ def _serialize_task(task: Task) -> dict:
                     "email": c.author.email,
                 },
             }
-            for c in task.comments
+            for c in task.comments if c.author is not None
         ],
     }
 
@@ -137,6 +158,8 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db), user: User = De
     for uid in body.assigneeIds:
         db.add(TaskAssignee(taskId=task.id, userId=uid))
 
+    _log(db, task.id, user.id, "created", {"title": task.title})
+
     db.commit()
     return {"task": _serialize_task(_load_task(db, task.id))}
 
@@ -147,6 +170,18 @@ def update_task(task_id: str, body: TaskUpdate, db: Session = Depends(get_db), u
     if not task:
         raise HTTPException(404, "Task not found")
     _check_member(db, task.workspaceId, user.id)
+
+    # ── Snapshot scalar fields BEFORE mutating, for diff-based activity log ──
+    before = {
+        "title": task.title,
+        "description": task.description,
+        "status": task.status,
+        "priority": task.priority,
+        "group": task.group,
+        "contactId": task.contactId,
+        "dueDate": _date_only(task.dueDate),
+        "startDate": _date_only(task.startDate),
+    }
 
     if body.title is not None:
         task.title = body.title[:500]
@@ -179,14 +214,81 @@ def update_task(task_id: str, body: TaskUpdate, db: Session = Depends(get_db), u
             except Exception:
                 task.startDate = None
 
+    # ── Log diffs for scalar fields ──
+    after = {
+        "title": task.title,
+        "description": task.description,
+        "status": task.status,
+        "priority": task.priority,
+        "group": task.group,
+        "contactId": task.contactId,
+        "dueDate": _date_only(task.dueDate),
+        "startDate": _date_only(task.startDate),
+    }
+    for field in ("title", "description", "status", "priority", "dueDate", "startDate"):
+        if before[field] != after[field]:
+            _log(db, task_id, user.id, field, {"from": before[field], "to": after[field]})
+
+    if before["contactId"] != after["contactId"]:
+        contact_name = None
+        if after["contactId"]:
+            c = db.query(Contact).filter_by(id=after["contactId"]).first()
+            if c:
+                contact_name = (f"{c.firstName} {c.lastName}").strip()
+        _log(db, task_id, user.id, "contact", {
+            "from": before["contactId"], "to": after["contactId"], "name": contact_name,
+        })
+
+    # ── Diff assignees ──
     if body.assigneeIds is not None:
+        prev_ids = {a.userId for a in db.query(TaskAssignee).filter_by(taskId=task_id).all()}
+        valid_user_ids = {u.id for u in db.query(User).filter(User.id.in_(body.assigneeIds)).all()} if body.assigneeIds else set()
+        new_ids = {uid for uid in body.assigneeIds if uid in valid_user_ids}
+
+        added   = new_ids  - prev_ids
+        removed = prev_ids - new_ids
+
+        if added or removed:
+            users_lookup = {u.id: u for u in db.query(User).filter(User.id.in_(added | removed)).all()}
+            for uid in added:
+                u = users_lookup.get(uid)
+                _log(db, task_id, user.id, "assignee_added", {
+                    "userId": uid, "name": u.name if u else None,
+                })
+            for uid in removed:
+                u = users_lookup.get(uid)
+                _log(db, task_id, user.id, "assignee_removed", {
+                    "userId": uid, "name": u.name if u else None,
+                })
+
         db.query(TaskAssignee).filter_by(taskId=task_id).delete()
-        for uid in body.assigneeIds:
+        for uid in new_ids:
             db.add(TaskAssignee(taskId=task_id, userId=uid))
 
+    # ── Diff tags ──
     if body.tagIds is not None:
+        prev_tag_ids = {t.tagId for t in db.query(TaskTag).filter_by(taskId=task_id).all()}
+        valid_tag_ids = {t.id for t in db.query(Tag).filter(Tag.id.in_(body.tagIds)).all()} if body.tagIds else set()
+        new_tag_ids = {tid for tid in body.tagIds if tid in valid_tag_ids}
+
+        added_t   = new_tag_ids  - prev_tag_ids
+        removed_t = prev_tag_ids - new_tag_ids
+
+        if added_t or removed_t:
+            tags_lookup = {t.id: t for t in db.query(Tag).filter(Tag.id.in_(added_t | removed_t)).all()}
+            for tid in added_t:
+                t = tags_lookup.get(tid)
+                _log(db, task_id, user.id, "tag_added", {
+                    "tagId": tid, "label": t.label if t else None, "color": t.color if t else None,
+                })
+            for tid in removed_t:
+                t = tags_lookup.get(tid)
+                _log(db, task_id, user.id, "tag_removed", {
+                    "tagId": tid, "label": t.label if t else None, "color": t.color if t else None,
+                })
+
         db.query(TaskTag).filter_by(taskId=task_id).delete()
-        for tid in body.tagIds:
+        for tid in new_tag_ids:
             db.add(TaskTag(taskId=task_id, tagId=tid))
 
     db.commit()
@@ -218,6 +320,7 @@ def add_comment(task_id: str, body: CommentCreate, db: Session = Depends(get_db)
         authorId=user.id,
     )
     db.add(comment)
+    _log(db, task_id, user.id, "comment_added", {"preview": comment.text[:120]})
     db.commit()
     db.refresh(comment)
 
@@ -232,3 +335,33 @@ def add_comment(task_id: str, body: CommentCreate, db: Session = Depends(get_db)
             },
         }
     }
+
+
+@router.get("/{task_id}/activity")
+def get_task_activity(task_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Return the chronological list of changes for a task."""
+    task = db.query(Task).filter_by(id=task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    _check_member(db, task.workspaceId, user.id)
+
+    rows = (
+        db.query(Activity)
+        .options(joinedload(Activity.user))
+        .filter_by(taskId=task_id)
+        .order_by(Activity.createdAt)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "action": a.action,
+            "details": json.loads(a.details) if a.details else None,
+            "createdAt": a.createdAt,
+            "user": {
+                "id": a.user.id, "name": a.user.name,
+                "initials": a.user.initials, "color": a.user.color, "email": a.user.email,
+            } if a.user else None,
+        }
+        for a in rows
+    ]

@@ -1,50 +1,122 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus, Clock, Lock, Pencil, Eye, ChevronRight, X, Check, Users, Shield } from "lucide-react";
 import { SpreadsheetDoc, DocAccessEntry, Role, ROLE_META, ROLE_ORDER, CURRENT_USER_ID } from "@/lib/mock-data";
 import { getDocAccess } from "@/lib/permissions";
 import { Spreadsheet } from "@/components/spreadsheet";
 import { useAppStore } from "@/lib/store";
+import { useWorkspace } from "@/lib/workspace-context";
+import {
+  listDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+} from "@/actions/documents";
 import { Trash2 } from "lucide-react";
 
 import { ShareModal } from "@/components/share-modal";
 
 export default function DocumentsPage() {
-  const docs = useAppStore((s) => s.documents).filter((d) => getDocAccess(d) !== "none");
+  const { workspace } = useWorkspace();
+  const wsId = workspace?.id;
+
+  const allDocs = useAppStore((s) => s.documents);
+  const docs = allDocs.filter((d) => getDocAccess(d) !== "none");
   const projects = useAppStore((s) => s.projects);
+  const setDocuments = useAppStore((s) => s.setDocuments);
   const addDoc = useAppStore((s) => s.addDoc);
   const updateDoc = useAppStore((s) => s.updateDoc);
   const deleteDoc = useAppStore((s) => s.deleteDoc);
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [shareModal,  setShareModal]  = useState(false);
+  const [loading,     setLoading]     = useState(false);
+
+  // Track which workspace is currently loaded so async results from a previous
+  // workspace can't overwrite the store after a switch.
+  const loadedWsRef = useRef<string | null>(null);
+  // Pending debounced save timers, keyed by document id.
+  const saveTimersRef = useRef<Record<string, any>>({});
+
+  // Reload documents from the backend whenever the active workspace changes.
+  useEffect(() => {
+    if (!wsId) return;
+    let cancelled = false;
+    loadedWsRef.current = wsId;
+    setLoading(true);
+    setActiveDocId(null);
+    setDocuments([]);
+    listDocuments(wsId).then((list) => {
+      if (cancelled || loadedWsRef.current !== wsId) return;
+      setDocuments(list);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [wsId, setDocuments]);
+
+  // Flush any pending debounced saves when the page unmounts so edits aren't lost.
+  useEffect(() => {
+    const timers = saveTimersRef.current;
+    return () => {
+      Object.values(timers).forEach((t) => clearTimeout(t));
+    };
+  }, []);
 
   const activeDoc  = docs.find((d) => d.id === activeDocId) ?? null;
   const canEdit    = activeDoc ? getDocAccess(activeDoc) === "edit" : false;
   const access     = activeDoc ? getDocAccess(activeDoc) : "none";
 
-  const createDoc = () => {
-    const id = `doc-${Date.now()}`;
-    const newDoc: SpreadsheetDoc = {
-      id,
+  // Debounced server-side persistence for document edits.
+  const scheduleSave = (doc: SpreadsheetDoc) => {
+    if (saveTimersRef.current[doc.id]) clearTimeout(saveTimersRef.current[doc.id]);
+    saveTimersRef.current[doc.id] = setTimeout(async () => {
+      const res = await updateDocument(doc.id, doc);
+      if ("doc" in res && res.doc) {
+        // Reflect server-side updatedAt without overwriting any in-flight local edits.
+        updateDoc({ ...doc, updatedAt: res.doc.updatedAt });
+      } else if ("error" in res) {
+        console.error("[documents] save failed:", res.error);
+      }
+    }, 600);
+  };
+
+  const handleDocChange = (next: SpreadsheetDoc) => {
+    updateDoc(next);          // optimistic
+    scheduleSave(next);       // debounced server save
+  };
+
+  const createDoc = async () => {
+    if (!wsId) return;
+    const draft: SpreadsheetDoc = {
+      id: `tmp-${Date.now()}`,
       title: "Новый документ",
       icon: "📄",
-      columns: [
-        { id: "c1", name: "Название",  type: "text",   width: 220 },
-        { id: "c2", name: "Статус",    type: "status", width: 150, options: ["Активно","Готово","Отложено"] },
-        { id: "c3", name: "Заметки",   type: "text",   width: 260 },
-      ],
-      rows: [
-        { id: "r1", cells: { c1: "", c2: "", c3: "" } },
-      ],
+      columns: [],
+      rows: [],
       defaultAccess: "edit",
       accessList: [{ kind: "member", memberId: CURRENT_USER_ID, access: "edit" }],
       createdAt: new Date().toISOString().split("T")[0],
       updatedAt: "Только что",
     };
-    addDoc(newDoc);
-    setActiveDocId(id);
+    const res = await createDocument(wsId, draft);
+    if ("error" in res) {
+      console.error("[documents] create failed:", res.error);
+      return;
+    }
+    addDoc(res.doc);
+    setActiveDocId(res.doc.id);
+  };
+
+  const handleDelete = async (docId: string) => {
+    deleteDoc(docId);                     // optimistic
+    if (activeDocId === docId) setActiveDocId(null);
+    const res = await deleteDocument(docId);
+    if ("error" in res) {
+      console.error("[documents] delete failed:", res.error);
+      // Refetch to recover from a failed delete.
+      if (wsId) listDocuments(wsId).then(setDocuments);
+    }
   };
 
   // ── Document list ─────────────────────────────────────────────────────────────
@@ -92,7 +164,7 @@ export default function DocumentsPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteDoc(doc.id);
+                        handleDelete(doc.id);
                       }}
                       className="ml-1 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-red-400/10 hover:text-red-400 transition-colors"
                       title="Удалить документ"
@@ -142,9 +214,17 @@ export default function DocumentsPage() {
     <div className="flex flex-col h-full animate-in fade-in duration-300 -m-4 md:-m-6 lg:-m-8">
       {shareModal && (
         <ShareModal
+          title={activeDoc.title}
           defaultAccess={activeDoc.defaultAccess}
           accessList={activeDoc.accessList}
-          onUpdate={(data) => { updateDoc({ ...activeDoc, ...data }); }}
+          onUpdate={(data) => {
+            handleDocChange({
+              ...activeDoc,
+              defaultAccess: data.defaultAccess,
+              accessList: data.accessList,
+              ...(data.title !== undefined ? { title: data.title } : {}),
+            });
+          }}
           onClose={() => setShareModal(false)}
         />
       )}
@@ -163,12 +243,8 @@ export default function DocumentsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Access badge */}
-          {access === "edit" ? (
-            <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full">
-              <Pencil className="w-3 h-3" /> Редактирование
-            </span>
-          ) : (
+          {/* Read-only badge (only when user actually can't edit) */}
+          {access !== "edit" && (
             <span className="flex items-center gap-1 text-xs text-amber-400 bg-amber-400/10 px-2 py-1 rounded-full">
               <Eye className="w-3 h-3" /> Только просмотр
             </span>
@@ -178,8 +254,8 @@ export default function DocumentsPage() {
             onClick={() => setShareModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary border border-border hover:border-primary/40 rounded-lg text-sm text-foreground transition-colors"
           >
-            <Users className="w-4 h-4" />
-            Доступ
+            <Pencil className="w-4 h-4" />
+            Редактирование
           </button>
         </div>
       </div>
@@ -189,7 +265,7 @@ export default function DocumentsPage() {
         <Spreadsheet
           doc={activeDoc}
           canEdit={canEdit}
-          onChange={updateDoc}
+          onChange={handleDocChange}
         />
       </div>
     </div>

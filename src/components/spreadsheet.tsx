@@ -241,7 +241,7 @@ function AddColumnModal({ onAdd, onClose }: { onAdd: (col: Omit<SpreadsheetColum
           ))}
         </div>
 
-        {(type === "select" || type === "status") && (
+        {type === "status" && (
           <>
             <label className="text-xs text-muted-foreground mb-1 block">Варианты (через запятую)</label>
             <input
@@ -268,6 +268,67 @@ function AddColumnModal({ onAdd, onClose }: { onAdd: (col: Omit<SpreadsheetColum
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Column Header (inline rename) ────────────────────────────────────────────
+
+function ColumnHeader({
+  col, canEdit, onRename, onDelete,
+}: {
+  col: SpreadsheetColumn;
+  canEdit: boolean;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(col.name);
+
+  const commit = () => {
+    setEditing(false);
+    if (draft.trim() && draft !== col.name) onRename(draft);
+    else setDraft(col.name);
+  };
+
+  return (
+    <div
+      style={{ width: col.width, minWidth: col.width }}
+      className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 border-r border-border group/colhdr hover:bg-secondary/30 transition-colors"
+    >
+      <span className="text-muted-foreground">{CELL_TYPE_META[col.type].icon}</span>
+
+      {editing && canEdit ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); commit(); }
+            if (e.key === "Escape") { setDraft(col.name); setEditing(false); }
+          }}
+          className="flex-1 min-w-0 bg-secondary/50 border border-primary/40 rounded px-1.5 py-0.5 text-[12px] font-medium text-foreground outline-none"
+        />
+      ) : (
+        <span
+          className={`text-[12px] font-medium text-foreground flex-1 truncate ${canEdit ? "cursor-text hover:text-primary" : ""}`}
+          onClick={() => canEdit && setEditing(true)}
+          title={canEdit ? "Клик — переименовать" : col.name}
+        >
+          {col.name}
+        </span>
+      )}
+
+      {canEdit && !editing && (
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover/colhdr:opacity-100 text-muted-foreground hover:text-red-400 transition-all"
+          title="Удалить колонку"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      )}
     </div>
   );
 }
@@ -309,8 +370,18 @@ export function Spreadsheet({ doc, canEdit, onChange }: SpreadsheetProps) {
 
   const startEdit = (rowId: string, colId: string) => {
     if (!canEdit) return;
+    const col = columns.find((c) => c.id === colId);
+    let initial = getCell(rowId, colId);
+    // For empty date cells, prefill with today's date so the user just confirms / changes it
+    if (col?.type === "date" && !initial) {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      initial = `${y}-${m}-${day}`;
+    }
     setEditing({ rowId, colId });
-    setEditValue(getCell(rowId, colId));
+    setEditValue(initial);
   };
 
   const commitEdit = () => {
@@ -356,6 +427,15 @@ export function Spreadsheet({ doc, canEdit, onChange }: SpreadsheetProps) {
     });
   };
 
+  const renameColumn = (colId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onChange({
+      ...doc,
+      columns: columns.map((c) => (c.id === colId ? { ...c, name: trimmed } : c)),
+    });
+  };
+
   const deleteColumn = (colId: string) => {
     onChange({
       ...doc,
@@ -395,6 +475,20 @@ export function Spreadsheet({ doc, canEdit, onChange }: SpreadsheetProps) {
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
   }, []);
+
+  // Clear cell selection when clicking outside the spreadsheet
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      const root = containerRef.current;
+      if (!root) return;
+      if (root.contains(e.target as Node)) return;
+      // Click landed outside — drop selection (and any in-progress edit)
+      setSelected(null);
+      if (editing) commitEdit();
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [editing]);
 
   // ── Grid layout ───────────────────────────────────────────────────────────────
   // row# col + all data columns + (+) add col
@@ -440,23 +534,13 @@ export function Spreadsheet({ doc, canEdit, onChange }: SpreadsheetProps) {
 
             {/* Column headers */}
             {columns.map((col, ci) => (
-              <div
+              <ColumnHeader
                 key={col.id}
-                style={{ width: col.width, minWidth: col.width }}
-                className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 border-r border-border group/colhdr hover:bg-secondary/30 transition-colors"
-              >
-                <span className="text-muted-foreground">{CELL_TYPE_META[col.type].icon}</span>
-                <span className="text-[12px] font-medium text-foreground flex-1 truncate">{col.name}</span>
-                {canEdit && (
-                  <button
-                    onClick={() => deleteColumn(col.id)}
-                    className="opacity-0 group-hover/colhdr:opacity-100 text-muted-foreground hover:text-red-400 transition-all"
-                    title="Удалить колонку"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+                col={col}
+                canEdit={canEdit}
+                onRename={(name) => renameColumn(col.id, name)}
+                onDelete={() => deleteColumn(col.id)}
+              />
             ))}
 
             {/* Add column button */}
@@ -514,15 +598,20 @@ export function Spreadsheet({ doc, canEdit, onChange }: SpreadsheetProps) {
                     key={col.id}
                     style={{ width: col.width, minWidth: col.width }}
                     className={`shrink-0 relative border-r border-border/40 px-3 py-2 cursor-cell overflow-hidden transition-colors ${
-                      isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/60" : ""
+                      isSelected && !isEditing ? "bg-primary/10 ring-1 ring-inset ring-primary/60" : ""
                     }`}
                     onClick={() => {
-                      setSelected({ rowId: row.id, colId: col.id });
-                      if (canEdit && (col.type === "select" || col.type === "status" || col.type === "person" || col.type === "date")) {
-                        startEdit(row.id, col.id);
+                      // 1st click — select & immediately enter edit mode
+                      if (!isEditing) {
+                        setSelected({ rowId: row.id, colId: col.id });
+                        if (canEdit) startEdit(row.id, col.id);
                       }
                     }}
-                    onDoubleClick={() => startEdit(row.id, col.id)}
+                    onDoubleClick={() => {
+                      // 2nd click — commit & clear selection (stop typing here)
+                      if (isEditing) commitEdit();
+                      setSelected(null);
+                    }}
                   >
                     {isEditing ? (
                       <CellEditor

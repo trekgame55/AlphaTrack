@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Mail, AlertCircle, ArrowLeft, Lock, Eye, EyeOff, User, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { checkEmailExists, loginUser, registerUser } from "@/actions/auth";
+import { joinWorkspaceByToken } from "@/actions/workspace";
 
 type Step = "email" | "login" | "register" | "success";
 
 export default function LoginPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams?.get("invite") ?? null;
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +41,15 @@ export default function LoginPageClient() {
     }
   };
 
+  const finishWithInviteIfAny = async () => {
+    if (inviteToken) {
+      // Best-effort: existing users who logged in still need to be added to the workspace.
+      try { await joinWorkspaceByToken(inviteToken); } catch {}
+    }
+    setStep("success");
+    setTimeout(() => router.push("/tasks"), 1200);
+  };
+
   const handleLogin = async () => {
     setPwErr(""); setErrorMsg("");
     if (!password) { setPwErr("Введите пароль"); return; }
@@ -45,7 +57,7 @@ export default function LoginPageClient() {
     try {
       const result = await loginUser(email, password);
       if (result.error) setErrorMsg(result.error);
-      else if (result.success) { setStep("success"); setTimeout(() => router.push("/tasks"), 1200); }
+      else if (result.success) await finishWithInviteIfAny();
     } catch { setErrorMsg("Ошибка сервера."); }
     finally { setLoading(false); }
   };
@@ -59,7 +71,9 @@ export default function LoginPageClient() {
     if (!ok) return;
     setLoading(true);
     try {
-      const result = await registerUser(name, email, password);
+      // When invite is present, backend will skip default-workspace creation
+      // and add the user to the invited workspace.
+      const result = await registerUser(name, email, password, inviteToken ?? undefined);
       if (result.error) setErrorMsg(result.error);
       else if (result.success) { setStep("success"); setTimeout(() => router.push("/tasks"), 1200); }
     } catch { setErrorMsg("Ошибка сервера."); }
@@ -90,7 +104,7 @@ export default function LoginPageClient() {
                   <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
                 </svg>
               </div>
-              <span className="text-lg font-bold tracking-tight">FlowDesk</span>
+              <span className="text-lg font-bold tracking-tight">AlphaTrack</span>
             </div>
             <div className="text-[22px] font-bold tracking-tight mb-1.5">Вход или регистрация</div>
             <div className="text-sm text-muted-foreground mb-7 leading-relaxed">Введите почту — мы определим что делать дальше</div>

@@ -1,10 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useWorkspace } from "@/lib/workspace-context";
 import { createTeamAction, renameWorkspaceAction, deleteWorkspaceAction, generateInviteLink } from "@/actions/workspace";
-import { ChevronUp, Check, Plus, LogOut, Settings, Loader2, X, MoreVertical, Pencil, Trash2, UserPlus, Link2 } from "lucide-react";
+import { ChevronUp, Check, Plus, LogOut, Settings, Loader2, X, MoreVertical, Pencil, Trash2, UserPlus, Copy } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+type InviteRole = "admin" | "member" | "viewer";
+const INVITE_ROLES: { value: InviteRole; label: string; hint: string }[] = [
+  { value: "viewer", label: "Наблюдатель", hint: "Только чтение" },
+  { value: "member", label: "Участник",    hint: "Может работать с задачами" },
+  { value: "admin",  label: "Администратор", hint: "Управляет пространством" },
+];
 
 export function UserProfileWidget() {
   const { currentUser, workspace, userWorkspaces, switchWorkspace, refresh } = useWorkspace();
@@ -14,27 +22,53 @@ export function UserProfileWidget() {
   const [newName, setNewName] = useState("");
   const [editWsId, setEditWsId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [inviteWs, setInviteWs] = useState<{ id: string; name: string } | null>(null);
+  const [inviteRole, setInviteRole] = useState<InviteRole>("member");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const router = useRouter();
 
+  // Render portals only after mount (SSR-safe)
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   if (!currentUser) return null;
+
+  const portal = (node: React.ReactNode) =>
+    mounted && typeof document !== "undefined" ? createPortal(node, document.body) : null;
 
   const handleCreate = async () => {
     if (!newName.trim() || isSubmitting) return;
     setIsSubmitting(true);
+    setErrorMsg(null);
     if (editWsId) {
-      await renameWorkspaceAction(editWsId, newName.trim());
+      const res = await renameWorkspaceAction(editWsId, newName.trim()) as any;
+      if (res?.error) {
+        setErrorMsg(res.error);
+        setIsSubmitting(false);
+        return;
+      }
       setEditWsId(null);
+      setShowCreate(false);
+      setNewName("");
       refresh();
     } else {
-      const res = await createTeamAction(newName.trim());
+      const res = await createTeamAction(newName.trim()) as any;
+      if (res?.error) {
+        setErrorMsg(res.error);
+        setIsSubmitting(false);
+        return;
+      }
       if (res.workspace) {
         switchWorkspace(res.workspace.id);
         setIsOpen(false);
       }
+      setShowCreate(false);
+      setNewName("");
     }
-    setShowCreate(false);
-    setNewName("");
     setIsSubmitting(false);
   };
 
@@ -42,44 +76,68 @@ export function UserProfileWidget() {
     if (!confirm("Вы уверены, что хотите удалить эту команду?")) return;
     await deleteWorkspaceAction(id);
     if (workspace?.id === id) {
-      localStorage.removeItem("weeek_active_ws");
+      localStorage.removeItem("alphatrack_active_ws");
       window.location.reload();
     } else {
       refresh();
     }
   };
 
-  const handleInvite = async (id: string) => {
-    const res = await generateInviteLink(id) as any;
-    if (res.link) {
-      navigator.clipboard.writeText(res.link);
-      setCopiedLink(id);
-      setTimeout(() => setCopiedLink(null), 2000);
-    }
+  const openInvite = (id: string, name: string) => {
+    setInviteWs({ id, name });
+    setInviteRole("member");
+    setInviteLink(null);
+    setInviteError(null);
+    setInviteCopied(false);
+  };
+
+  const generateLink = async () => {
+    if (!inviteWs) return;
+    setInviteLoading(true);
+    setInviteError(null);
+    const res = await generateInviteLink(inviteWs.id, inviteRole) as any;
+    setInviteLoading(false);
+    if (res?.error) { setInviteError(res.error); return; }
+    // Build the link from the current origin so it works for any host the inviter is using.
+    const link = res?.token
+      ? `${window.location.origin}/invite/${res.token}`
+      : (res?.link ?? "");
+    setInviteLink(link);
+    try { await navigator.clipboard.writeText(link); setInviteCopied(true); setTimeout(() => setInviteCopied(false), 2000); } catch {}
+  };
+
+  const copyInviteLink = async () => {
+    if (!inviteLink) return;
+    try { await navigator.clipboard.writeText(inviteLink); setInviteCopied(true); setTimeout(() => setInviteCopied(false), 2000); } catch {}
   };
 
   const logout = () => {
-    document.cookie = "weeek_session=; path=/; max-age=0";
+    document.cookie = "alphatrack_session=; path=/; max-age=0";
     router.push("/login");
   };
 
   return (
     <>
-      {showCreate && (
+      {portal(showCreate && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowCreate(false)}>
           <div className="bg-[#111111] border border-border rounded-2xl w-full max-w-sm p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-foreground">{editWsId ? "Переименовать команду" : "Новая команда"}</h2>
-              <button onClick={() => { setShowCreate(false); setEditWsId(null); }} className="text-muted-foreground hover:text-white transition-colors"><X className="w-4 h-4"/></button>
+              <button onClick={() => { setShowCreate(false); setEditWsId(null); setErrorMsg(null); }} className="text-muted-foreground hover:text-white transition-colors"><X className="w-4 h-4"/></button>
             </div>
             <input
               autoFocus
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
+              onChange={(e) => { setNewName(e.target.value); setErrorMsg(null); }}
               placeholder="Название команды..."
-              className="w-full bg-secondary/40 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:border-primary outline-none transition-colors mb-4"
+              className="w-full bg-secondary/40 border border-border rounded-lg px-3 py-2.5 text-sm text-foreground focus:border-primary outline-none transition-colors mb-3"
               onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
             />
+            {errorMsg && (
+              <div className="mb-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                {errorMsg}
+              </div>
+            )}
             <button
               disabled={!newName.trim() || isSubmitting}
               onClick={handleCreate}
@@ -89,7 +147,7 @@ export function UserProfileWidget() {
             </button>
           </div>
         </div>
-      )}
+      ))}
 
       <div className="relative p-3 shrink-0 mt-auto border-t border-border/50">
         {isOpen && (
@@ -170,7 +228,85 @@ export function UserProfileWidget() {
         </button>
       </div>
 
-      {activeMenu && (
+      {portal(inviteWs && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInviteWs(null)}>
+          <div className="bg-[#111111] border border-border rounded-2xl w-full max-w-md p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-semibold text-foreground">Пригласить в команду</h2>
+              <button onClick={() => setInviteWs(null)} className="text-muted-foreground hover:text-white transition-colors"><X className="w-4 h-4"/></button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4 truncate">«{inviteWs.name}»</p>
+
+            <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Роль приглашённого</label>
+            <div className="grid grid-cols-3 gap-1.5 mb-4">
+              {INVITE_ROLES.map(r => {
+                const active = inviteRole === r.value;
+                return (
+                  <button
+                    key={r.value}
+                    onClick={() => { setInviteRole(r.value); setInviteLink(null); }}
+                    className={`text-left px-3 py-2 rounded-lg border transition-colors ${active ? "border-primary bg-primary/10" : "border-border bg-secondary/40 hover:bg-secondary/70"}`}
+                  >
+                    <div className={`text-[12px] font-semibold ${active ? "text-primary" : "text-foreground"}`}>{r.label}</div>
+                    <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{r.hint}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {inviteError && (
+              <div className="mb-3 px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                {inviteError}
+              </div>
+            )}
+
+            {inviteLink ? (
+              <>
+                <div className="flex items-center gap-2 bg-secondary border border-border rounded-md px-3 py-2 mb-3">
+                  <span className="text-xs text-foreground font-mono truncate flex-1">{inviteLink}</span>
+                  <button
+                    onClick={copyInviteLink}
+                    className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded transition-colors"
+                    title="Копировать"
+                  >
+                    {inviteCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-3">
+                  Отправьте ссылку приглашённому. Чтобы принять приглашение, ему нужно зарегистрироваться или войти. Срок действия — 7 дней, ссылка одноразовая.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={generateLink}
+                    disabled={inviteLoading}
+                    className="flex-1 py-2 bg-secondary hover:bg-secondary/70 border border-border text-foreground text-sm rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Сгенерировать новую
+                  </button>
+                  <button
+                    onClick={() => setInviteWs(null)}
+                    className="flex-1 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Готово
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button
+                disabled={inviteLoading}
+                onClick={generateLink}
+                className="w-full py-2.5 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {inviteLoading
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <><UserPlus className="w-4 h-4" /> Создать ссылку-приглашение</>}
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {portal(activeMenu && (
         <div className="fixed inset-0 z-[110]" onClick={() => setActiveMenu(null)}>
           <div 
             className="fixed bg-[#222222] border border-border rounded-lg shadow-2xl p-1 w-40 flex flex-col"
@@ -180,16 +316,15 @@ export function UserProfileWidget() {
             <button onClick={() => { setNewName(activeMenu.name); setEditWsId(activeMenu.id); setShowCreate(true); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-white/5 text-foreground">
               <Pencil className="w-3 h-3" /> Переименовать
             </button>
-            <button onClick={() => { handleInvite(activeMenu.id); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-white/5 text-foreground">
-              {copiedLink === activeMenu.id ? <Link2 className="w-3 h-3 text-emerald-400" /> : <UserPlus className="w-3 h-3" />}
-              {copiedLink === activeMenu.id ? "Скопировано!" : "Пригласить"}
+            <button onClick={() => { openInvite(activeMenu.id, activeMenu.name); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-white/5 text-foreground">
+              <UserPlus className="w-3 h-3" /> Пригласить
             </button>
             <button onClick={() => { handleDelete(activeMenu.id); setActiveMenu(null); }} className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded text-xs hover:bg-red-500/10 text-red-400 mt-1 border-t border-border/50">
               <Trash2 className="w-3 h-3" /> Удалить
             </button>
           </div>
         </div>
-      )}
+      ))}
     </>
   );
 }

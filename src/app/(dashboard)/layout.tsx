@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
+import { api } from "@/lib/api";
 import { DashboardShell } from "./shell";
 
-const COOKIE_NAME = "weeek_session";
+const COOKIE_NAME = "alphatrack_session";
 
 async function getCurrentUserId(): Promise<string | null> {
   const cookieStore = await cookies();
@@ -11,9 +11,8 @@ async function getCurrentUserId(): Promise<string | null> {
   if (!token) return null;
 
   try {
-    const session = await db.session.findUnique({ where: { token } });
-    if (!session || session.expiresAt < new Date()) return null;
-    return session.userId;
+    const user = await api.auth.me(token);
+    return user?.id ?? null;
   } catch {
     return null;
   }
@@ -22,9 +21,7 @@ async function getCurrentUserId(): Promise<string | null> {
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const userId = await getCurrentUserId();
   if (!userId) {
-    // Clear the stale cookie via response headers before redirecting
-    const response = redirect("/login");
-    return response;
+    return redirect("/login");
   }
 
   return <DashboardShell userId={userId}>{children}</DashboardShell>;

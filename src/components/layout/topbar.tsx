@@ -6,7 +6,6 @@ import { logoutUser } from "@/actions/auth";
 
 const PAGE_META: Record<string, { title: string; showViewSwitcher: boolean }> = {
   "/tasks":      { title: "Мои задачи",   showViewSwitcher: true  },
-  "/all-tasks":  { title: "Все задачи",   showViewSwitcher: true  },
   "/projects":   { title: "Проекты",      showViewSwitcher: false },
   "/documents":  { title: "Документы",    showViewSwitcher: false },
   "/contacts":   { title: "Контакты",     showViewSwitcher: false },
@@ -14,7 +13,7 @@ const PAGE_META: Record<string, { title: string; showViewSwitcher: boolean }> = 
   "/board":      { title: "Доска",        showViewSwitcher: false },
   "/templates":  { title: "Шаблоны",      showViewSwitcher: false },
   "/archive":    { title: "Архив",        showViewSwitcher: false },
-  "/":           { title: "FlowDesk",     showViewSwitcher: false },
+  "/":           { title: "AlphaTrack",     showViewSwitcher: false },
 };
 
 function getPageMeta(pathname: string) {
@@ -23,7 +22,6 @@ function getPageMeta(pathname: string) {
 
 const VIEW_BUTTONS = [
   { label: "Список", icon: <List className="w-3.5 h-3.5" />,        href: "/tasks"     },
-  { label: "Таблица", icon: <Table2 className="w-3.5 h-3.5" />,     href: "/all-tasks" },
   { label: "Неделя", icon: <CalendarDays className="w-3.5 h-3.5" />, href: "/week"      },
   { label: "Доска",  icon: <Kanban className="w-3.5 h-3.5" />,       href: "/board"     },
 ];

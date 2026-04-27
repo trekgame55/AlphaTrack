@@ -1,6 +1,3 @@
-"""
-Auth utilities: password hashing, session tokens
-"""
 import bcrypt
 from datetime import datetime, timedelta, timezone
 import secrets
@@ -40,6 +37,5 @@ AVATAR_COLORS = [
 ]
 
 import random
-
 def pick_color() -> str:
     return random.choice(AVATAR_COLORS)

@@ -1,7 +1,8 @@
 // ─── Base Types ───────────────────────────────────────────────────────────────
 
 export type Priority = "high" | "medium" | "low" | "none";
-export type Status   = "backlog" | "todo" | "in_progress" | "review" | "done";
+// Status is now a free-form string ID (built-in: "backlog" | "todo" | "in_progress" | "review" | "done", plus user-defined ones from useStatusStore)
+export type Status   = string;
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ export const MEMBERS: Member[] = [];
 
 /** The currently logged-in user (mock) */
 export const CURRENT_USER_ID = "u1";
-export const CURRENT_USER: Member = { id: "u1", name: "Ivan Petrov", initials: "IP", color: "bg-violet-500", email: "ivan@flowdesk.app", globalRole: "admin_plus" };
+export const CURRENT_USER: Member = { id: "u1", name: "Ivan Petrov", initials: "IP", color: "bg-violet-500", email: "ivan@AlphaTrack.app", globalRole: "admin_plus" };
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
@@ -110,7 +111,13 @@ export const PROJECTS: Project[] = [];
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
 const today    = new Date();
-const fmt      = (d: Date) => d.toISOString().split("T")[0];
+// Local YYYY-MM-DD (avoid UTC shift in non-UTC timezones)
+const fmt      = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
 const addDays  = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
 export const todayStr    = fmt(today);
@@ -130,15 +137,15 @@ export const getWeekDays = () => {
 
 export const MOCK_TASKS: Task[] = [
   {
-    id: "W-101", title: "Реализовать дизайн-систему", description: "Настроить токены цветов, шрифты, радиусы и shadow-levels согласно Weeek UI Kit.",
+    id: "W-101", title: "Реализовать дизайн-систему", description: "Настроить токены цветов, шрифты, радиусы и shadow-levels согласно AlphaTrack UI Kit.",
     status: "in_progress", priority: "high", dueDate: todayStr,
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[0], MEMBERS[2]], tags: [TAGS[0], TAGS[2]], comments: [], createdAt: "2026-04-10", group: "Today",
   },
   {
     id: "W-102", title: "Настроить Tailwind и shadcn/ui", description: "Подключить shadcn/ui, настроить плагины.",
     status: "done", priority: "medium", dueDate: todayStr,
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[0]], tags: [TAGS[5]], comments: [
       { id: "c1", author: MEMBERS[1], text: "Отлично, всё работает!", createdAt: "Сегодня" }
     ], createdAt: "2026-04-11", group: "Today",
@@ -152,13 +159,13 @@ export const MOCK_TASKS: Task[] = [
   {
     id: "W-103", title: "Сделать Kanban board", description: "Реализовать колонки с drag and drop через dnd-kit.",
     status: "todo", priority: "high", dueDate: tomorrowStr,
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[0], MEMBERS[1]], tags: [TAGS[0]], comments: [], createdAt: "2026-04-12", group: "Tomorrow",
   },
   {
     id: "W-104", title: "Интеграция с Prisma / SQLite", description: "Подключить реальную БД, server actions для задач.",
     status: "todo", priority: "high", dueDate: fmt(addDays(today, 3)),
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[0]], tags: [TAGS[1]], comments: [], createdAt: "2026-04-13", group: "Later",
   },
   {
@@ -170,13 +177,13 @@ export const MOCK_TASKS: Task[] = [
   {
     id: "W-105", title: "Weekly planner view", description: "Сетка недели с drag-and-drop задач между днями.",
     status: "in_progress", priority: "high", dueDate: todayStr,
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[0], MEMBERS[1], MEMBERS[2]], tags: [TAGS[0]], comments: [], createdAt: "2026-04-15", group: "Today",
   },
   {
     id: "W-106", title: "Task detail modal", description: "Полный drawer с полями задачи, комментариями и историей.",
     status: "todo", priority: "medium", dueDate: fmt(addDays(today, 2)),
-    projectId: "p1", projectName: "Weeek Clone", projectColor: "bg-purple-500",
+    projectId: "p1", projectName: "AlphaTrack", projectColor: "bg-purple-500",
     assignees: [MEMBERS[3], MEMBERS[0]], tags: [TAGS[0], TAGS[2]], comments: [], createdAt: "2026-04-15", group: "Later",
   },
   {

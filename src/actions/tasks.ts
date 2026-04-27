@@ -93,6 +93,19 @@ export async function deleteTask(taskId: string) {
 
 // ─── Add comment ──────────────────────────────────────────────────────────────
 
+// ─── Get task activity log ───────────────────────────────────────────────────
+
+export async function getTaskActivity(taskId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    const items = await api.tasks.activity(token, taskId);
+    return { items };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось загрузить историю" };
+  }
+}
+
 export async function addComment(taskId: string, text: string) {
   const token = await getToken();
   if (!token) return { error: "Нет авторизации" };

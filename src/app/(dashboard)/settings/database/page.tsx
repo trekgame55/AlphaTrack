@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Database, HardDrive, Download, Upload, Plus, Trash2,
-  RotateCcw, CheckCircle2, AlertCircle, Loader2, RefreshCw,
-  FileJson, Archive, Server, Users, Briefcase, ListTodo,
+  Database, HardDrive, Download, Trash2,
+  CheckCircle2, AlertCircle, Loader2, RefreshCw,
+  Archive, Server, Users, Briefcase, ListTodo,
   BookUser, Tag, MessageSquare, Clock,
 } from "lucide-react";
 import {
   getDbStats, listBackups, createBackup,
-  restoreBackup, deleteBackup, exportDatabaseJson,
-  readBackupBase64, readCurrentDbBase64,
+  deleteBackup, getDownloadUrl, getDbDownloadUrl, getSessionToken,
 } from "@/actions/database";
 
 type Stat = Awaited<ReturnType<typeof getDbStats>>;
@@ -21,11 +20,6 @@ function downloadBlob(blob: Blob, filename: string) {
   const a = document.createElement("a");
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
-}
-
-function base64ToBlob(b64: string, mime: string) {
-  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  return new Blob([bytes], { type: mime });
 }
 
 const STAT_CARDS = [
@@ -69,14 +63,6 @@ export default function DatabasePage() {
     else notify("err", res.error || "Ошибка");
   };
 
-  const handleRestore = async (name: string) => {
-    if (!confirm(`Восстановить базу из «${name}»? Текущие данные будут сохранены как бекап перед заменой.`)) return;
-    setBusy("restore-" + name);
-    const res = await restoreBackup(name) as any;
-    setBusy(null);
-    if (res.success) { notify("ok", "База восстановлена! Перезагрузите страницу."); load(); }
-    else notify("err", res.error || "Ошибка");
-  };
 
   const handleDeleteBackup = async (name: string) => {
     if (!confirm(`Удалить бекап «${name}»?`)) return;
@@ -89,28 +75,20 @@ export default function DatabasePage() {
 
   const handleDownloadDb = async () => {
     setBusy("download-db");
-    const res = await readCurrentDbBase64() as any;
+    const [url, token] = await Promise.all([getDbDownloadUrl(), getSessionToken()]);
     setBusy(null);
-    if (res.base64) downloadBlob(base64ToBlob(res.base64, "application/octet-stream"), "flowdesk.db");
-    else notify("err", res.error || "Ошибка");
+    const res = await fetch(url, { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) { notify("err", "Ошибка скачивания"); return; }
+    downloadBlob(await res.blob(), "alphatrack.db");
   };
 
   const handleDownloadBackup = async (name: string) => {
     setBusy("dl-" + name);
-    const res = await readBackupBase64(name) as any;
+    const [url, token] = await Promise.all([getDownloadUrl(name), getSessionToken()]);
     setBusy(null);
-    if (res.base64) downloadBlob(base64ToBlob(res.base64, "application/octet-stream"), name);
-    else notify("err", res.error || "Ошибка");
-  };
-
-  const handleExportJson = async () => {
-    setBusy("json");
-    const json = await exportDatabaseJson();
-    setBusy(null);
-    const blob = new Blob([json as string], { type: "application/json" });
-    const ts = new Date().toISOString().slice(0, 10);
-    downloadBlob(blob, `flowdesk_export_${ts}.json`);
-    notify("ok", "JSON экспорт скачан");
+    const res = await fetch(url, { headers: { "x-session-token": token ?? "" } });
+    if (!res.ok) { notify("err", "Ошибка скачивания"); return; }
+    downloadBlob(await res.blob(), name);
   };
 
   return (
@@ -197,20 +175,6 @@ export default function DatabasePage() {
               </div>
             </button>
 
-            {/* Export JSON */}
-            <button
-              onClick={handleExportJson}
-              disabled={busy === "json"}
-              className="group flex items-start gap-3 p-4 bg-[#111111] border border-border rounded-xl hover:border-blue-500/40 hover:bg-blue-500/5 transition-all text-left disabled:opacity-60"
-            >
-              <div className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 group-hover:bg-blue-500/30 transition-colors">
-                {busy === "json" ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileJson className="w-5 h-5" />}
-              </div>
-              <div>
-                <p className="font-medium text-foreground text-sm">Экспорт JSON</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Все данные в читаемом виде</p>
-              </div>
-            </button>
           </div>
         </div>
 
@@ -264,14 +228,6 @@ export default function DatabasePage() {
                             {busy === "dl-" + b.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                           </button>
                           <button
-                            onClick={() => handleRestore(b.name)}
-                            disabled={!!busy}
-                            className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
-                            title="Восстановить"
-                          >
-                            {busy === "restore-" + b.name ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
                             onClick={() => handleDeleteBackup(b.name)}
                             disabled={!!busy}
                             className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
@@ -294,7 +250,7 @@ export default function DatabasePage() {
           <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-sm text-foreground/80 leading-relaxed">
             <b className="text-amber-400">Рекомендация:</b> Создавайте бекапы регулярно перед важными изменениями. 
-            Бекапы хранятся в папке <code className="bg-secondary px-1 rounded text-xs font-mono">prisma/backups/</code> на сервере. 
+            Бекапы хранятся в папке <code className="bg-secondary px-1 rounded text-xs font-mono">backend/backups/</code> на сервере. 
             Файл <code className="bg-secondary px-1 rounded text-xs font-mono">.db</code> можно открыть в{" "}
             <a href="https://sqlitebrowser.org" target="_blank" rel="noreferrer" className="text-primary hover:underline">DB Browser for SQLite</a>.
           </div>

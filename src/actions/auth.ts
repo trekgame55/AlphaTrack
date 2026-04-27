@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { api, ApiError } from "@/lib/api";
 
-const COOKIE = "weeek_session";
+const COOKIE = "alphatrack_session";
 
 async function getToken(): Promise<string | null> {
   const store = await cookies();
@@ -11,7 +11,6 @@ async function getToken(): Promise<string | null> {
 }
 
 function setSessionCookie(token: string) {
-  // fire-and-forget — used in login/register only
   cookies().then(store => {
     const expires = new Date();
     expires.setDate(expires.getDate() + 30);
@@ -25,8 +24,6 @@ function setSessionCookie(token: string) {
   });
 }
 
-// ─── Check email ──────────────────────────────────────────────────────────────
-
 export async function checkEmailExists(email: string): Promise<boolean> {
   try {
     const r = await api.auth.checkEmail(email);
@@ -35,8 +32,6 @@ export async function checkEmailExists(email: string): Promise<boolean> {
     return false;
   }
 }
-
-// ─── Login ────────────────────────────────────────────────────────────────────
 
 export async function loginUser(rawEmail: string, rawPassword: string) {
   try {
@@ -57,14 +52,11 @@ export async function loginUser(rawEmail: string, rawPassword: string) {
       if (err.status === 401) return { error: "Неверный email или пароль" };
       return { error: err.message };
     }
-    console.error("[auth] loginUser error:", err);
     return { error: "Ошибка сервера. Попробуйте позже." };
   }
 }
 
-// ─── Register ─────────────────────────────────────────────────────────────────
-
-export async function registerUser(rawName: string, rawEmail: string, rawPassword: string) {
+export async function registerUser(rawName: string, rawEmail: string, rawPassword: string, inviteToken?: string) {
   if (!rawName?.trim())     return { error: "Введите ваше имя" };
   if (rawPassword.length < 6) return { error: "Пароль должен содержать минимум 6 символов" };
 
@@ -73,6 +65,7 @@ export async function registerUser(rawName: string, rawEmail: string, rawPasswor
       rawName.trim(),
       rawEmail.trim().toLowerCase(),
       rawPassword,
+      inviteToken,
     );
     const store = await cookies();
     const expires = new Date();
@@ -90,12 +83,9 @@ export async function registerUser(rawName: string, rawEmail: string, rawPasswor
       if (err.status === 400) return { error: "Email уже зарегистрирован" };
       return { error: err.message };
     }
-    console.error("[auth] registerUser error:", err);
     return { error: "Ошибка при регистрации. Попробуйте позже." };
   }
 }
-
-// ─── Logout ───────────────────────────────────────────────────────────────────
 
 export async function logoutUser() {
   const store = await cookies();
@@ -106,8 +96,6 @@ export async function logoutUser() {
   store.delete(COOKIE);
   return { success: true };
 }
-
-// ─── Get current user (used by workspace context, middleware) ─────────────────
 
 export async function getCurrentUser() {
   const token = await getToken();
@@ -121,3 +109,28 @@ export async function getCurrentUser() {
 }
 
 export { getToken };
+
+export async function updateProfile(data: { name?: string; email?: string }) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    const user = await api.auth.updateProfile(token, data);
+    return { user };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось обновить профиль" };
+  }
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  if (!currentPassword) return { error: "Введите текущий пароль" };
+  if (newPassword.length < 6) return { error: "Минимум 6 символов" };
+  try {
+    await api.auth.changePassword(token, currentPassword, newPassword);
+    return { success: true };
+  } catch (err: any) {
+    if (err instanceof ApiError && err.status === 401) return { error: "Неверный текущий пароль" };
+    return { error: err?.message ?? "Не удалось сменить пароль" };
+  }
+}

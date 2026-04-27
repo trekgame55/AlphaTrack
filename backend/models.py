@@ -1,6 +1,3 @@
-"""
-SQLAlchemy models — mirrors the Prisma schema exactly
-"""
 from sqlalchemy import (
     Column, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint
 )
@@ -13,8 +10,6 @@ import uuid
 def gen_id():
     return str(uuid.uuid4())
 
-
-# ─── Auth ─────────────────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
@@ -45,8 +40,6 @@ class Session(Base):
 
     user = relationship("User", back_populates="sessions")
 
-
-# ─── Workspace ────────────────────────────────────────────────────────────────
 
 class Workspace(Base):
     __tablename__ = "workspaces"
@@ -88,15 +81,13 @@ class WorkspaceInvite(Base):
     workspaceId = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     token       = Column(String, unique=True, nullable=False)
     email       = Column(String, nullable=True)
-    role        = Column(String, default="member")
+    role        = Column(String, default="viewer")
     usedAt      = Column(DateTime, nullable=True)
     expiresAt   = Column(DateTime, nullable=False)
     createdAt   = Column(DateTime, server_default=func.now())
 
     workspace = relationship("Workspace", back_populates="invites")
 
-
-# ─── Projects ─────────────────────────────────────────────────────────────────
 
 class Project(Base):
     __tablename__ = "projects"
@@ -112,8 +103,6 @@ class Project(Base):
     tasks     = relationship("Task",      back_populates="project")
 
 
-# ─── Tags ─────────────────────────────────────────────────────────────────────
-
 class Tag(Base):
     __tablename__ = "tags"
 
@@ -125,8 +114,6 @@ class Tag(Base):
     workspace = relationship("Workspace", back_populates="tags")
     tasks     = relationship("TaskTag",   back_populates="tag", cascade="all, delete")
 
-
-# ─── Tasks ────────────────────────────────────────────────────────────────────
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -152,6 +139,8 @@ class Task(Base):
     tags      = relationship("TaskTag",      back_populates="task", cascade="all, delete")
     comments  = relationship("Comment",      back_populates="task", cascade="all, delete",
                              order_by="Comment.createdAt")
+    activities = relationship("Activity",    back_populates="task", cascade="all, delete",
+                              order_by="Activity.createdAt")
 
 
 class TaskAssignee(Base):
@@ -187,7 +176,19 @@ class Comment(Base):
     author = relationship("User", back_populates="comments")
 
 
-# ─── Contacts ─────────────────────────────────────────────────────────────────
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id        = Column(String, primary_key=True, default=gen_id)
+    taskId    = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    userId    = Column(String, ForeignKey("users.id"),                     nullable=True)
+    action    = Column(String, nullable=False)
+    details   = Column(Text,   nullable=True)
+    createdAt = Column(DateTime, server_default=func.now())
+
+    task = relationship("Task", back_populates="activities")
+    user = relationship("User")
+
 
 class Contact(Base):
     __tablename__ = "contacts"
@@ -216,8 +217,6 @@ class ContactPhone(Base):
 
     contact = relationship("Contact", back_populates="phones")
 
-
-# ─── Documents ────────────────────────────────────────────────────────────────
 
 class Document(Base):
     __tablename__ = "documents"

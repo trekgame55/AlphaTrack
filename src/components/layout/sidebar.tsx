@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Search, CheckCircle2, ListTodo, Briefcase, FileText,
+  CheckCircle2, ListTodo, Briefcase, FileText,
   LayoutTemplate, Archive, Plus, UserPlus, X, CalendarDays,
   Calendar, Kanban, BookUser, Link2, Settings2, DatabaseZap,
 } from "lucide-react";
@@ -25,7 +25,6 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
   const mainLinks = [
     { name: "Мои задачи",   href: "/tasks",      icon: <CheckCircle2  className="w-[18px] h-[18px]" /> },
-    { name: "Все задачи",   href: "/all-tasks",  icon: <ListTodo      className="w-[18px] h-[18px]" /> },
     { name: "Документы",    href: "/documents",  icon: <FileText      className="w-[18px] h-[18px]" /> },
     { name: "Контакты",     href: "/contacts",   icon: <BookUser      className="w-[18px] h-[18px]" /> },
   ];
@@ -94,7 +93,7 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
               </svg>
             </div>
             <div className="flex flex-col">
-              <span className="text-[15px] font-bold tracking-tight text-white group-hover:text-primary transition-colors leading-none">FlowDesk</span>
+              <span className="text-[15px] font-bold tracking-tight text-white group-hover:text-primary transition-colors leading-none">AlphaTrack</span>
               {workspace && <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{workspace.name}</span>}
             </div>
           </Link>
@@ -105,13 +104,6 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto py-3 px-3 flex flex-col gap-5 custom-scrollbar">
-          {/* Search */}
-          <button className="w-full flex items-center gap-2.5 px-2.5 py-1.5 text-muted-foreground border border-transparent hover:border-border hover:bg-white/5 rounded-md transition-colors group">
-            <Search className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
-            <span className="text-[13px] font-medium group-hover:text-white transition-colors flex-1 text-left">Поиск</span>
-            <span className="text-[10px] uppercase font-bold bg-white/10 px-1.5 py-0.5 rounded text-white/60">⌘K</span>
-          </button>
-
           {/* Main */}
           <div className="flex flex-col gap-0.5">
             {mainLinks.map(renderLink)}

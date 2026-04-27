@@ -1,14 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Mail, AlertCircle, ArrowLeft, Lock, Eye, EyeOff, User, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { checkEmailExists, loginUser, registerUser } from "@/actions/auth";
+import { joinWorkspaceByToken } from "@/actions/workspace";
 
 type Step = "email" | "login" | "register" | "success";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams?.get("invite") ?? null;
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -40,6 +51,14 @@ export default function LoginPage() {
     }
   };
 
+  const finishWithInviteIfAny = async () => {
+    if (inviteToken) {
+      try { await joinWorkspaceByToken(inviteToken); } catch {}
+    }
+    setStep("success");
+    setTimeout(() => router.push("/tasks"), 1200);
+  };
+
   const handleLogin = async () => {
     setPwErr(""); setErrorMsg("");
     if (!password) { setPwErr("Введите пароль"); return; }
@@ -49,8 +68,7 @@ export default function LoginPage() {
       if (result.error) {
         setErrorMsg(result.error);
       } else if (result.success) {
-        setStep("success");
-        setTimeout(() => router.push("/tasks"), 1200);
+        await finishWithInviteIfAny();
       }
     } catch {
       setErrorMsg("Ошибка сервера. Попробуйте позже.");
@@ -68,7 +86,9 @@ export default function LoginPage() {
     if (!ok) return;
     setLoading(true);
     try {
-      const result = await registerUser(name.trim(), email.trim(), password);
+      // Pass invite token: backend will skip default workspace creation
+      // and add the user to the invited workspace as the invite's role.
+      const result = await registerUser(name.trim(), email.trim(), password, inviteToken ?? undefined);
       if (result.error) {
         setErrorMsg(result.error);
       } else if (result.success) {
@@ -110,7 +130,7 @@ export default function LoginPage() {
                   <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
                 </svg>
               </div>
-              <span className="text-lg font-bold tracking-tight">FlowDesk</span>
+              <span className="text-lg font-bold tracking-tight">AlphaTrack</span>
             </div>
 
             <h1 className="text-[22px] font-bold tracking-tight mb-1.5">Вход или регистрация</h1>

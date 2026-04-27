@@ -7,8 +7,8 @@ __pycache__/
 *.pyc
 *.pyo
 backend/backups/
-prisma/backups/
 backend/app.db
-prisma/dev.db
 backend/backend.log
 tsconfig.tsbuildinfo
+deploy/deploy.sh
+deploy/setup.sh

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
  * Swipe left  → next view
  * Swipe right → previous view
  */
-const VIEWS = ["/tasks", "/all-tasks", "/week", "/board"];
+const VIEWS = ["/tasks", "/week", "/board"];
 
 export function useSwipeNavigation(currentPath: string) {
   const router = useRouter();

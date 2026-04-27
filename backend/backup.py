@@ -1,6 +1,3 @@
-"""
-Automatic backup service: runs every hour in background thread
-"""
 import os
 import shutil
 import threading
@@ -12,7 +9,7 @@ logger = logging.getLogger("backup")
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "app.db")
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), "backups")
-MAX_BACKUPS = 48  # keep last 48 hourly backups (2 days)
+MAX_BACKUPS = 48
 
 
 def _do_backup():
@@ -24,7 +21,6 @@ def _do_backup():
     shutil.copy2(DB_PATH, dst)
     logger.info(f"[Backup] Created {dst}")
 
-    # Prune old backups
     backups = sorted(
         [f for f in os.listdir(BACKUP_DIR) if f.endswith(".db")],
         reverse=True,
@@ -40,11 +36,10 @@ def _backup_loop():
             _do_backup()
         except Exception as e:
             logger.error(f"[Backup] Error: {e}")
-        time.sleep(3600)  # 1 hour
+        time.sleep(3600)
 
 
 def start_backup_service():
-    """Start background hourly backup thread."""
     t = threading.Thread(target=_backup_loop, daemon=True)
     t.start()
     logger.info("[Backup] Backup service started (hourly)")

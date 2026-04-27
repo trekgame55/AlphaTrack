@@ -1,118 +1,69 @@
 "use server";
 
-import fs from "fs";
-import path from "path";
-import { db } from "@/lib/db";
+import { getToken } from "@/actions/auth";
 
-const DB_PATH = path.resolve(process.cwd(), "prisma/dev.db");
-const BACKUP_DIR = path.resolve(process.cwd(), "prisma/backups");
+const API = process.env.PYTHON_BACKEND_URL ?? "http://localhost:8000";
 
-// Ensure backup directory exists
-function ensureBackupDir() {
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+async function apiFetch(path: string, opts: RequestInit = {}) {
+  const token = await getToken();
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: { "x-session-token": token ?? "", ...(opts.headers ?? {}) },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).detail ?? `HTTP ${res.status}`);
+  }
+  return res;
+}
+
+export async function getDbStats() {
+  try {
+    const res = await apiFetch("/api/stats");
+    return await res.json();
+  } catch (e: any) {
+    return { error: e.message };
   }
 }
 
-// ─── Get DB stats ─────────────────────────────────────────────────────────────
-
-export async function getDbStats() {
-  const [
-    users, workspaces, members, projects, tasks,
-    contacts, phones, tags, comments, sessions,
-  ] = await Promise.all([
-    db.user.count(),
-    db.workspace.count(),
-    db.workspaceMember.count(),
-    db.project.count(),
-    db.task.count(),
-    db.contact.count(),
-    db.contactPhone.count(),
-    db.tag.count(),
-    db.comment.count(),
-    db.session.count(),
-  ]);
-
-  const stat = fs.statSync(DB_PATH);
-  const fileSizeKb = Math.round(stat.size / 1024);
-
-  return { users, workspaces, members, projects, tasks, contacts, phones, tags, comments, sessions, fileSizeKb };
-}
-
-// ─── List backups ─────────────────────────────────────────────────────────────
-
 export async function listBackups() {
-  ensureBackupDir();
-  const files = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.endsWith(".db"))
-    .map(f => {
-      const p = path.join(BACKUP_DIR, f);
-      const stat = fs.statSync(p);
-      return { name: f, sizeKb: Math.round(stat.size / 1024), createdAt: stat.mtime.toISOString() };
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  return files;
+  try {
+    const res = await apiFetch("/api/backup/list");
+    const raw: { filename: string; size: number; createdAt: string }[] = await res.json();
+    return raw.map(b => ({ name: b.filename, sizeKb: Math.round(b.size / 1024), createdAt: b.createdAt }));
+  } catch {
+    return [];
+  }
 }
-
-// ─── Create backup ────────────────────────────────────────────────────────────
 
 export async function createBackup() {
-  ensureBackupDir();
-  const now = new Date();
-  const ts = now.toISOString().replace(/[:.]/g, "-").replace("T", "_").slice(0, 19);
-  const backupName = `backup_${ts}.db`;
-  const dest = path.join(BACKUP_DIR, backupName);
-  fs.copyFileSync(DB_PATH, dest);
-  return { success: true, name: backupName };
+  try {
+    const res = await apiFetch("/api/backup/now", { method: "POST" });
+    const data = await res.json();
+    return { success: true, name: data.filename };
+  } catch (e: any) {
+    return { error: e.message };
+  }
 }
-
-// ─── Restore from backup ──────────────────────────────────────────────────────
-
-export async function restoreBackup(backupName: string) {
-  const src = path.join(BACKUP_DIR, backupName);
-  if (!fs.existsSync(src)) return { error: "Резервная копия не найдена" };
-  // Safety: backup current first
-  await createBackup();
-  fs.copyFileSync(src, DB_PATH);
-  return { success: true };
-}
-
-// ─── Delete backup ────────────────────────────────────────────────────────────
 
 export async function deleteBackup(backupName: string) {
-  const p = path.join(BACKUP_DIR, backupName);
-  if (!fs.existsSync(p)) return { error: "Файл не найден" };
-  fs.unlinkSync(p);
-  return { success: true };
+  try {
+    await apiFetch(`/api/backup/${encodeURIComponent(backupName)}`, { method: "DELETE" });
+    return { success: true };
+  } catch (e: any) {
+    return { error: e.message };
+  }
 }
 
-// ─── Export full DB as JSON ───────────────────────────────────────────────────
-
-export async function exportDatabaseJson() {
-  const [users, workspaces, projects, tasks, contacts, tags] = await Promise.all([
-    db.user.findMany({ select: { id: true, email: true, name: true, initials: true, color: true, createdAt: true } }),
-    db.workspace.findMany({ include: { members: { include: { user: { select: { id: true, name: true, email: true } } } } } }),
-    db.project.findMany(),
-    db.task.findMany({ include: { assignees: true, tags: true, comments: { include: { author: { select: { id: true, name: true } } } } } }),
-    db.contact.findMany({ include: { phones: true } }),
-    db.tag.findMany(),
-  ]);
-
-  return JSON.stringify({ exportedAt: new Date().toISOString(), users, workspaces, projects, tasks, contacts, tags }, null, 2);
+export async function getDownloadUrl(backupName: string): Promise<string> {
+  return `${API}/api/backup/${encodeURIComponent(backupName)}/download`;
 }
 
-// ─── Read backup file as base64 (for download) ───────────────────────────────
-
-export async function readBackupBase64(backupName: string) {
-  const p = path.join(BACKUP_DIR, backupName);
-  if (!fs.existsSync(p)) return { error: "Файл не найден" };
-  const buf = fs.readFileSync(p);
-  return { base64: buf.toString("base64"), name: backupName };
+export async function getDbDownloadUrl(): Promise<string> {
+  return `${API}/api/backup/db/download`;
 }
 
-// ─── Read current DB as base64 (for download) ────────────────────────────────
-
-export async function readCurrentDbBase64() {
-  const buf = fs.readFileSync(DB_PATH);
-  return { base64: buf.toString("base64"), name: "flowdesk.db" };
+export async function getSessionToken(): Promise<string | null> {
+  return getToken();
 }

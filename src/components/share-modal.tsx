@@ -6,13 +6,15 @@ import { DocAccessEntry, ROLE_META, ROLE_ORDER } from "@/lib/mock-data";
 import { useAppStore } from "@/lib/store";
 
 export interface ShareModalProps {
+  title?: string;
   defaultAccess: "view" | "edit" | "none";
   accessList: DocAccessEntry[];
-  onUpdate: (data: { defaultAccess: "view" | "edit" | "none"; accessList: DocAccessEntry[] }) => void;
+  onUpdate: (data: { title?: string; defaultAccess: "view" | "edit" | "none"; accessList: DocAccessEntry[] }) => void;
   onClose: () => void;
 }
 
 export function ShareModal({
+  title: initTitle,
   defaultAccess: initDefault,
   accessList: initList,
   onUpdate,
@@ -20,6 +22,7 @@ export function ShareModal({
 }: ShareModalProps) {
   const [list, setList] = useState<DocAccessEntry[]>(initList || []);
   const [defaultAccess, setDefaultAccess] = useState(initDefault || "none");
+  const [title, setTitle] = useState(initTitle ?? "");
   const members = useAppStore((s) => s.members);
 
   const upsert = (entry: DocAccessEntry) => {
@@ -45,7 +48,11 @@ export function ShareModal({
   };
 
   const save = () => {
-    onUpdate({ accessList: list, defaultAccess });
+    onUpdate({
+      title: initTitle !== undefined ? title.trim() || initTitle : undefined,
+      accessList: list,
+      defaultAccess,
+    });
     onClose();
   };
 
@@ -85,6 +92,19 @@ export function ShareModal({
         </div>
 
         <div className="px-5 py-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+          {/* Title (only when editing a document) */}
+          {initTitle !== undefined && (
+            <div className="mb-5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Название документа</p>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Название..."
+                className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
+              />
+            </div>
+          )}
+
           {/* Default access */}
           <div className="mb-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Доступ по умолчанию</p>
@@ -97,6 +117,11 @@ export function ShareModal({
               <option value="view">Просмотр</option>
               <option value="edit">Редактирование</option>
             </select>
+            {defaultAccess === "none" && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Доступ будет только у владельца и явно добавленных участников.
+              </p>
+            )}
           </div>
 
           {/* By role */}

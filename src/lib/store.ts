@@ -10,11 +10,13 @@ interface AppState {
   rolePermissions: Record<Role, RoleConfig>;
 
   // Task actions
+  setTasks: (tasks: Task[]) => void;
   addTask: (task: Task) => void;
   updateTask: (task: Task) => void;
   deleteTask: (id: string) => void;
 
   // Document actions
+  setDocuments: (docs: SpreadsheetDoc[]) => void;
   addDoc: (doc: SpreadsheetDoc) => void;
   updateDoc: (doc: SpreadsheetDoc) => void;
   deleteDoc: (id: string) => void;
@@ -46,6 +48,7 @@ export const useAppStore = create<AppState>((set) => ({
   members: [],
   rolePermissions: DEFAULT_ROLE_PERMISSIONS,
 
+  setTasks: (tasks) => set({ tasks }),
   addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
   updateTask: (updated) => set((state) => ({
     tasks: state.tasks.map((t) => (t.id === updated.id ? updated : t))
@@ -54,6 +57,7 @@ export const useAppStore = create<AppState>((set) => ({
     tasks: state.tasks.filter((t) => t.id !== id)
   })),
 
+  setDocuments: (docs) => set({ documents: docs }),
   addDoc: (doc) => set((state) => ({ documents: [doc, ...state.documents] })),
   updateDoc: (updated) => set((state) => ({
     documents: state.documents.map((d) => (d.id === updated.id ? updated : d))

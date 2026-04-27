@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import Workspace, WorkspaceMember, WorkspaceInvite, User, Tag
-from schemas import WorkspaceCreate, WorkspaceOut, WorkspaceShort, MemberOut
+from schemas import WorkspaceCreate, WorkspaceOut, WorkspaceShort, MemberOut, GenerateInviteRequest, MemberRoleUpdate
 from deps import get_current_user
 from auth import create_token
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 import uuid
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -148,19 +149,129 @@ def remove_member(workspace_id: str, member_id: str, db: Session = Depends(get_d
     return {"ok": True}
 
 
+VALID_ROLES = {"admin_plus", "admin", "member", "viewer"}
+
+
+def _require_admin(member: WorkspaceMember):
+    if member.role not in ("admin_plus", "admin"):
+        raise HTTPException(403, "Admin rights required")
+
+
 @router.post("/{workspace_id}/invite")
-def generate_invite(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _check_member(db, workspace_id, user.id)
+def generate_invite(
+    workspace_id: str,
+    body: Optional[GenerateInviteRequest] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    role = (body.role if body and body.role else "viewer")
+    if role not in VALID_ROLES:
+        raise HTTPException(400, "Invalid role")
     token = create_token()
     invite = WorkspaceInvite(
         id=str(uuid.uuid4()),
         workspaceId=workspace_id,
         token=token,
+        role=role,
         expiresAt=datetime.now(timezone.utc) + timedelta(days=7),
     )
     db.add(invite)
     db.commit()
-    return {"link": f"/invite/{token}"}
+    return {"link": f"/invite/{token}", "token": token, "role": role}
+
+
+@router.get("/{workspace_id}/invites")
+def list_invites(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    invites = db.query(WorkspaceInvite).filter_by(workspaceId=workspace_id).order_by(WorkspaceInvite.createdAt.desc()).all()
+    return [
+        {
+            "id": inv.id,
+            "token": inv.token,
+            "role": inv.role,
+            "expiresAt": inv.expiresAt.isoformat() if inv.expiresAt else None,
+            "usedAt": inv.usedAt.isoformat() if inv.usedAt else None,
+            "createdAt": inv.createdAt.isoformat() if inv.createdAt else None,
+        }
+        for inv in invites
+    ]
+
+
+@router.delete("/{workspace_id}/invites/{invite_id}")
+def revoke_invite(workspace_id: str, invite_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    inv = db.query(WorkspaceInvite).filter_by(id=invite_id, workspaceId=workspace_id).first()
+    if not inv:
+        raise HTTPException(404, "Invite not found")
+    db.delete(inv)
+    db.commit()
+    return {"ok": True}
+
+
+@router.patch("/{workspace_id}/members/{member_id}")
+def update_member_role(
+    workspace_id: str, member_id: str, body: MemberRoleUpdate,
+    db: Session = Depends(get_db), user: User = Depends(get_current_user),
+):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    if body.role not in VALID_ROLES:
+        raise HTTPException(400, "Invalid role")
+    member = db.query(WorkspaceMember).filter_by(id=member_id, workspaceId=workspace_id).first()
+    if not member:
+        raise HTTPException(404, "Member not found")
+    # Prevent the workspace owner from being demoted
+    ws = db.query(Workspace).filter_by(id=workspace_id).first()
+    if ws and ws.ownerId == member.userId and body.role != "admin_plus":
+        raise HTTPException(400, "Cannot change owner's role")
+    member.role = body.role
+    db.commit()
+    return {"id": member.id, "role": member.role}
+
+
+@router.patch("/{workspace_id}")
+def rename_workspace(
+    workspace_id: str, body: WorkspaceCreate,
+    db: Session = Depends(get_db), user: User = Depends(get_current_user),
+):
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
+    ws = db.query(Workspace).filter_by(id=workspace_id).first()
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+    new_name = (body.name or "").strip()
+    if not new_name:
+        raise HTTPException(400, "Name cannot be empty")
+    ws.name = new_name
+    db.commit()
+    return {"id": ws.id, "name": ws.name}
+
+
+@router.post("/{workspace_id}/leave")
+def leave_workspace(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    me = _check_member(db, workspace_id, user.id)
+    ws = db.query(Workspace).filter_by(id=workspace_id).first()
+    if ws and ws.ownerId == user.id:
+        raise HTTPException(400, "Owner cannot leave workspace; transfer ownership or delete it")
+    db.delete(me)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/{workspace_id}")
+def delete_workspace(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ws = db.query(Workspace).filter_by(id=workspace_id).first()
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+    if ws.ownerId != user.id:
+        raise HTTPException(403, "Only the owner can delete the workspace")
+    db.delete(ws)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/accept-invite")

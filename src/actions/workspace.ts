@@ -3,16 +3,12 @@
 import { cookies } from "next/headers";
 import { api, ApiError } from "@/lib/api";
 
-const COOKIE = "weeek_session";
-
-// ─── Token helper ─────────────────────────────────────────────────────────────
+const COOKIE = "alphatrack_session";
 
 export async function getToken(): Promise<string | null> {
   const store = await cookies();
   return store.get(COOKIE)?.value ?? null;
 }
-
-// ─── Get current user from Python session ─────────────────────────────────────
 
 export async function getCurrentUser() {
   const token = await getToken();
@@ -67,13 +63,13 @@ export async function createTeamAction(name: string) {
 
 // ─── Generate invite link ────────────────────────────────────────────────────
 
-export async function generateInviteLink(workspaceId: string) {
+export async function generateInviteLink(workspaceId: string, role: string = "viewer") {
   const token = await getToken();
   if (!token) return { error: "Нет авторизации" };
   try {
-    const res = await api.workspaces.generateInvite(token, workspaceId);
+    const res = await api.workspaces.generateInvite(token, workspaceId, role);
     const base = process.env.NEXT_PUBLIC_URL || "http://localhost:4040";
-    return { link: `${base}${res.link}` };
+    return { link: `${base}${res.link}`, token: res.token, role: res.role };
   } catch (err: any) {
     return { error: err?.message };
   }
@@ -117,14 +113,74 @@ export async function removeMember(workspaceId: string, memberId: string) {
   }
 }
 
-// ─── Rename workspace (stub — add to Python backend if needed) ────────────────
+// ─── Rename / leave / delete workspace ─────────────────────────────────────────
 
 export async function renameWorkspaceAction(workspaceId: string, name: string) {
-  return { success: true }; // TODO: add PUT /workspaces/{id} to Python backend
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  if (!name?.trim()) return { error: "Название не может быть пустым" };
+  try {
+    const res = await api.workspaces.rename(token, workspaceId, name.trim());
+    return { success: true, name: res.name };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось переименовать" };
+  }
 }
 
 export async function deleteWorkspaceAction(workspaceId: string) {
-  return { success: true }; // TODO: add DELETE /workspaces/{id} to Python backend
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    await api.workspaces.delete(token, workspaceId);
+    return { success: true };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось удалить" };
+  }
+}
+
+export async function leaveWorkspaceAction(workspaceId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    await api.workspaces.leave(token, workspaceId);
+    return { success: true };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось покинуть пространство" };
+  }
+}
+
+// ─── Member role / Invites management ─────────────────────────────────────────
+
+export async function updateMemberRoleAction(workspaceId: string, memberId: string, role: string) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    const res = await api.workspaces.updateMemberRole(token, workspaceId, memberId, role);
+    return { success: true, role: res.role };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось изменить роль" };
+  }
+}
+
+export async function listInvitesAction(workspaceId: string) {
+  const token = await getToken();
+  if (!token) return [];
+  try {
+    return await api.workspaces.listInvites(token, workspaceId);
+  } catch {
+    return [];
+  }
+}
+
+export async function revokeInviteAction(workspaceId: string, inviteId: string) {
+  const token = await getToken();
+  if (!token) return { error: "Нет авторизации" };
+  try {
+    await api.workspaces.revokeInvite(token, workspaceId, inviteId);
+    return { success: true };
+  } catch (err: any) {
+    return { error: err?.message ?? "Не удалось отозвать инвайт" };
+  }
 }
 
 export async function changeMemberRole(workspaceId: string, userId: string, role: string) {
