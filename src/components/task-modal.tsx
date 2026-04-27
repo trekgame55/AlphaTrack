@@ -11,7 +11,7 @@ import { useAllStatuses, statusClasses } from "@/lib/statuses";
 import { BookUser, Phone, Copy } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { ShareModal } from "@/components/share-modal";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspace, usePermission } from "@/lib/workspace-context";
 import { createTag as apiCreateTag, deleteTag as apiDeleteTag } from "@/actions/tags";
 import { addComment as apiAddComment, getTaskActivity } from "@/actions/tasks";
 import type { ActivityDTO } from "@/lib/api";
