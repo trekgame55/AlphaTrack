@@ -7,8 +7,9 @@ from datetime import datetime
 
 logger = logging.getLogger("backup")
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "app.db")
-BACKUP_DIR = os.path.join(os.path.dirname(__file__), "backups")
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+DB_PATH = os.path.join(DATA_DIR, "app.db")
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
 MAX_BACKUPS = 48
 
 

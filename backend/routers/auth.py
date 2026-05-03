@@ -5,6 +5,7 @@ from models import User, Session as DbSession, Workspace, WorkspaceMember, Works
 from schemas import RegisterRequest, LoginRequest, SessionOut, UserOut, UpdateProfileRequest, ChangePasswordRequest
 from auth import hash_password, verify_password, create_token, session_expires_at, make_initials, pick_color
 from deps import get_current_user
+from permissions import seed_defaults
 from datetime import datetime, timezone
 import uuid
 
@@ -76,6 +77,8 @@ def register(body: RegisterRequest, response: Response, db: Session = Depends(ge
             ("Bug",      "bg-red-500/20 text-red-400"),
         ]:
             db.add(Tag(id=str(uuid.uuid4()), label=label, color=color, workspaceId=ws.id))
+
+        seed_defaults(db, ws.id)
 
     token = create_token()
     session = DbSession(

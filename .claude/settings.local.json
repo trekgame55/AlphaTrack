@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"D:\\\\зк\\\\we\")",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(python -c \"import py_compile; import os; errors=[]; [errors.append\\(f\\) for f in os.listdir\\('.'\\) if f.endswith\\('.py'\\) and py_compile.compile\\(f, doraise=True\\) is None]; print\\('All OK'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(py --version)",
+      "Bash(python3 -c ' *)",
+      "Bash(py -3 -c ' *)",
+      "Bash(py -c ' *)"
+    ]
+  }
+}

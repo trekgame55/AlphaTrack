@@ -34,7 +34,11 @@ export async function middleware(request: NextRequest) {
       res.cookies.delete(COOKIE_NAME);
       return res;
     }
-  } catch {}
+  } catch {
+    const res = NextResponse.redirect(new URL('/login', request.url));
+    res.cookies.delete(COOKIE_NAME);
+    return res;
+  }
 
   if (pathname === '/') {
     return NextResponse.redirect(new URL('/tasks', request.url));
