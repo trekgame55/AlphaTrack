@@ -55,7 +55,10 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
   const [contactNewName, setContactNewName] = useState("");
   const [contactEditModal, setContactEditModal] = useState<Contact | null | "new">(null);
   const { currentUser, contacts: wsContacts, setContacts: setWsContacts, workspace, tags: wsTags, setTags: setWsTags } = useWorkspace();
-  const canComment = usePermission("tasks.comment");
+  const canComment    = usePermission("tasks.comment");
+  const canEdit       = usePermission("tasks.edit");
+  const canDelete     = usePermission("tasks.delete");
+  const canManageTags = usePermission("tags.manage");
   const allStatuses = useAllStatuses();
 
   // Pull all real workspace members (everyone who joined the team — including invitees).
@@ -93,6 +96,10 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
   const handleSendComment = async () => {
     const text = newComment.trim();
     if (!text || !editedTask || sendingComment) return;
+    if (!canComment) {
+      setCommentError("Нет прав на комментирование");
+      return;
+    }
     setSendingComment(true);
     setCommentError(null);
     const res = await apiAddComment(editedTask.id, text);
@@ -249,7 +256,7 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
             <button className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
               <MoreHorizontal className="w-4 h-4" />
             </button>
-            {onDelete && (
+            {onDelete && canDelete && (
               <button
                 onClick={() => onDelete(editedTask.id)}
                 className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
@@ -268,11 +275,19 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className={`flex-1 overflow-y-auto custom-scrollbar ${!canEdit ? "opacity-90" : ""}`}>
+
+          {/* Read-only banner when the user has no edit permission */}
+          {!canEdit && (
+            <div className="mx-5 mt-3 px-3 py-2 rounded-md bg-yellow-400/10 border border-yellow-400/30 text-[12px] text-yellow-300 flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Режим только для чтения — у вас нет прав редактировать эту задачу.</span>
+            </div>
+          )}
 
           {/* Title */}
           <div className="px-5 py-4">
-            {editingTitle ? (
+            {editingTitle && canEdit ? (
               <input
                 autoFocus
                 className="w-full text-[20px] font-bold bg-transparent outline-none text-foreground placeholder:text-muted-foreground"
@@ -283,8 +298,8 @@ export function TaskModal({ task, onClose, onUpdate, onDelete }: TaskModalProps)
               />
             ) : (
               <h2
-                className="text-[20px] font-bold text-foreground cursor-text hover:text-primary transition-colors"
-                onClick={() => setEditingTitle(true)}
+                className={`text-[20px] font-bold text-foreground transition-colors ${canEdit ? "cursor-text hover:text-primary" : "cursor-default"}`}
+                onClick={() => canEdit && setEditingTitle(true)}
               >
                 {editedTask.title}
               </h2>

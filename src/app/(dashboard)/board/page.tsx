@@ -16,7 +16,7 @@ import {
   updateTask as apiUpdateTask,
   deleteTask as apiDeleteTask,
 } from "@/actions/tasks";
-import { useWorkspace, usePermissionStatus } from "@/lib/workspace-context";
+import { useWorkspace, usePermission, usePermissionStatus } from "@/lib/workspace-context";
 import { NoAccess } from "@/components/no-access";
 import { dtoToTask } from "@/lib/task-adapter";
 
@@ -38,6 +38,7 @@ export default function BoardPage() {
 
   const { workspace } = useWorkspace();
   const viewStatus = usePermissionStatus("tasks.view");
+  const canEditTask = usePermission("tasks.edit");
   const allStatuses = useAllStatuses();
   const removeStatus = useStatusStore((s) => s.remove);
   const renameStatus = useStatusStore((s) => s.rename);
@@ -162,6 +163,7 @@ export default function BoardPage() {
   };
 
   const handleUpdateTask = async (updated: Task) => {
+    if (!canEditTask) return;
     updateTask(updated);
     const res = await apiUpdateTask(updated.id, {
       title: updated.title,

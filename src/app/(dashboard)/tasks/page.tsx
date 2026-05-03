@@ -183,6 +183,7 @@ export default function TasksPage() {
   const { workspace, currentUser } = useWorkspace();
   const viewStatus    = usePermissionStatus("tasks.view");
   const canCreateTask = usePermission("tasks.create");
+  const canEditTask   = usePermission("tasks.edit");
   const canDeleteTask = usePermission("tasks.delete");
 
   // Local task state — reset when workspace changes
@@ -274,6 +275,7 @@ export default function TasksPage() {
 
   const toggleDone = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canEditTask) return;
     const t = tasks.find((x) => x.id === taskId);
     if (!t) return;
     const newStatus = t.status === "done" ? "todo" : "done";
@@ -282,6 +284,7 @@ export default function TasksPage() {
   };
 
   const updateDate = (taskId: string, date: string) => {
+    if (!canEditTask) return;
     setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, dueDate: date } : t));
     updateTask(taskId, { dueDate: date });
   };
@@ -382,6 +385,7 @@ export default function TasksPage() {
     const { active, over } = event;
     setActiveId(null); setOverGroup(null);
     if (!over) return;
+    if (!canEditTask) return; // no-op for read-only users
     const aTask = tasks.find((t) => t.id === active.id);
     if (!aTask) return;
     const overId = String(over.id);
