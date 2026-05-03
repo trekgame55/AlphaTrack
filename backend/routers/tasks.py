@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
-from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact
+from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact, FcmToken
 from schemas import TaskCreate, TaskUpdate, TaskOut, CommentCreate, CommentOut
 from deps import get_current_user
 from permissions import require_permission
+from fcm_service import send_push
 from datetime import datetime, timezone
 import uuid
 import json
@@ -259,6 +260,18 @@ def update_task(task_id: str, body: TaskUpdate, db: Session = Depends(get_db), u
                 _log(db, task_id, user.id, "assignee_added", {
                     "userId": uid, "name": u.name if u else None,
                 })
+                # ── Отправляем push-уведомление новому исполнителю ──
+                if u and uid != user.id:  # не отправляем себе самому
+                    tokens = [
+                        t.token for t in
+                        db.query(FcmToken).filter_by(userId=uid).all()
+                    ]
+                    if tokens:
+                        send_push(
+                            tokens=tokens,
+                            title="Новая задача",
+                            body=f"Вы назначены исполнителем: {task.title}",
+                        )
             for uid in removed:
                 u = users_lookup.get(uid)
                 _log(db, task_id, user.id, "assignee_removed", {

@@ -27,6 +27,7 @@ class User(Base):
     memberships       = relationship("WorkspaceMember", back_populates="user",      cascade="all, delete")
     taskAssignees     = relationship("TaskAssignee",    back_populates="user",      cascade="all, delete")
     comments          = relationship("Comment",         back_populates="author")
+    fcm_tokens        = relationship("FcmToken",        back_populates="user",      cascade="all, delete")
 
 
 class Session(Base):
@@ -247,3 +248,16 @@ class Document(Base):
 
     workspace = relationship("Workspace", back_populates="documents")
     author    = relationship("User")
+
+
+class FcmToken(Base):
+    """Stores one FCM push token per device per user."""
+    __tablename__ = "fcm_tokens"
+    __table_args__ = (UniqueConstraint("userId", "token"),)
+
+    id        = Column(String, primary_key=True, default=gen_id)
+    userId    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token     = Column(String, nullable=False)
+    createdAt = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="fcm_tokens")

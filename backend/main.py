@@ -2,6 +2,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -14,7 +15,7 @@ from deps import get_current_user
 from models import User, Workspace, Project
 
 import models
-from routers import auth, workspaces, tasks, contacts, documents, tags
+from routers import auth, workspaces, tasks, contacts, documents, tags, fcm
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,26 +23,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    start_backup_service()
+    yield
+
+
 app = FastAPI(
     title="AlphaTrack API",
     description="REST API for AlphaTrack",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
+
+_allowed_origins = [
+    "http://localhost:4040",
+    "http://127.0.0.1:4040",
+]
+_public_url = os.environ.get("NEXT_PUBLIC_URL")
+if _public_url:
+    _allowed_origins.append(_public_url.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
-    start_backup_service()
 
 app.include_router(auth.router,        prefix="/api")
 app.include_router(workspaces.router,  prefix="/api")
@@ -49,6 +62,7 @@ app.include_router(tasks.router,       prefix="/api")
 app.include_router(contacts.router,    prefix="/api")
 app.include_router(documents.router,   prefix="/api")
 app.include_router(tags.router,        prefix="/api")
+app.include_router(fcm.router,         prefix="/api")
 
 
 @app.get("/api/projects")
