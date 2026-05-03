@@ -6,16 +6,19 @@ import {
   CheckCircle2, ListTodo, CalendarDays, Kanban, BookUser,
   FileText, MoreHorizontal, Settings2,
 } from "lucide-react";
-
-const NAV_ITEMS = [
-  { href: "/tasks",     icon: CheckCircle2, label: "Задачи"   },
-  { href: "/week",      icon: CalendarDays, label: "Неделя"   },
-  { href: "/board",     icon: Kanban,       label: "Доска"    },
-  { href: "/contacts",  icon: BookUser,     label: "Контакты" },
-];
+import { usePermission } from "@/lib/workspace-context";
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const canTasks    = usePermission("tasks.view");
+  const canContacts = usePermission("contacts.view");
+
+  const NAV_ITEMS = [
+    canTasks    && { href: "/tasks",     icon: CheckCircle2, label: "Задачи"   },
+    canTasks    && { href: "/week",      icon: CalendarDays, label: "Неделя"   },
+    canTasks    && { href: "/board",     icon: Kanban,       label: "Доска"    },
+    canContacts && { href: "/contacts",  icon: BookUser,     label: "Контакты" },
+  ].filter(Boolean) as { href: string; icon: any; label: string }[];
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#111111]/95 backdrop-blur-md border-t border-border safe-area-bottom">

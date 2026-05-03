@@ -6,7 +6,8 @@ import { SpreadsheetDoc, DocAccessEntry, Role, ROLE_META, ROLE_ORDER, CURRENT_US
 import { getDocAccess } from "@/lib/permissions";
 import { Spreadsheet } from "@/components/spreadsheet";
 import { useAppStore } from "@/lib/store";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspace, usePermission, usePermissionStatus } from "@/lib/workspace-context";
+import { NoAccess } from "@/components/no-access";
 import {
   listDocuments,
   createDocument,
@@ -20,6 +21,10 @@ import { ShareModal } from "@/components/share-modal";
 export default function DocumentsPage() {
   const { workspace } = useWorkspace();
   const wsId = workspace?.id;
+  const viewStatus = usePermissionStatus("documents.view");
+  const canCreate = usePermission("documents.create");
+  const canEditPerm = usePermission("documents.edit");
+  const canDelete = usePermission("documents.delete");
 
   const allDocs = useAppStore((s) => s.documents);
   const docs = allDocs.filter((d) => getDocAccess(d) !== "none");
@@ -119,19 +124,24 @@ export default function DocumentsPage() {
     }
   };
 
+  if (viewStatus === "loading") return null;
+  if (viewStatus === "denied")  return <NoAccess />;
+
   // ── Document list ─────────────────────────────────────────────────────────────
   if (!activeDoc) {
     return (
       <div className="flex flex-col h-full animate-in fade-in duration-300">
         <div className="flex items-center justify-between mb-6">
           <div className="text-sm text-muted-foreground">{docs.length} документов</div>
-          <button
-            onClick={createDoc}
-            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Создать документ</span>
-          </button>
+          {canCreate && (
+            <button
+              onClick={createDoc}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Создать документ</span>
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-auto custom-scrollbar pb-4">
@@ -161,16 +171,18 @@ export default function DocumentsPage() {
                         <Lock className="w-2.5 h-2.5" /> Нет доступа
                       </span>
                     )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(doc.id);
-                      }}
-                      className="ml-1 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-red-400/10 hover:text-red-400 transition-colors"
-                      title="Удалить документ"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {canDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(doc.id);
+                        }}
+                        className="ml-1 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:bg-red-400/10 hover:text-red-400 transition-colors"
+                        title="Удалить документ"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -195,15 +207,17 @@ export default function DocumentsPage() {
             );
           })}
 
-          <button
-            onClick={createDoc}
-            className="flex flex-col items-center justify-center bg-[#111111] border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-5 min-h-[130px] text-muted-foreground hover:text-primary transition-colors group"
-          >
-            <div className="w-10 h-10 rounded-xl border-2 border-dashed border-current flex items-center justify-center mb-2">
-              <Plus className="w-5 h-5" />
-            </div>
-            <span className="text-sm font-medium">Новый документ</span>
-          </button>
+          {canCreate && (
+            <button
+              onClick={createDoc}
+              className="flex flex-col items-center justify-center bg-[#111111] border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-5 min-h-[130px] text-muted-foreground hover:text-primary transition-colors group"
+            >
+              <div className="w-10 h-10 rounded-xl border-2 border-dashed border-current flex items-center justify-center mb-2">
+                <Plus className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium">Новый документ</span>
+            </button>
+          )}
         </div>
       </div>
     );

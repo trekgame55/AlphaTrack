@@ -14,7 +14,8 @@ import {
   updateTask as apiUpdateTask,
   deleteTask as apiDeleteTask,
 } from "@/actions/tasks";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspace, usePermissionStatus } from "@/lib/workspace-context";
+import { NoAccess } from "@/components/no-access";
 import { dtoToTask } from "@/lib/task-adapter";
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -106,6 +107,7 @@ export default function WeekPage() {
   const deleteTask = useAppStore((s) => s.deleteTask);
 
   const { workspace } = useWorkspace();
+  const viewStatus = usePermissionStatus("tasks.view");
   const allStatuses = useAllStatuses();
 
   // Load tasks from backend on mount / workspace change
@@ -260,6 +262,9 @@ export default function WeekPage() {
         const l = last.toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
         return `${f} — ${l}`;
       })();
+
+  if (viewStatus === "loading") return null;
+  if (viewStatus === "denied")  return <NoAccess />;
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">

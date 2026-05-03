@@ -461,7 +461,8 @@ const ROLE_HEADERS: { key: string; label: string; cls: string }[] = [
   { key: "viewer", label: "Наблюдатель", cls: "text-zinc-400" },
 ];
 
-function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
+export function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
+  const { refresh } = useWorkspace();
   const [matrix, setMatrix] = useState<Record<string, Record<string, boolean>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -495,7 +496,12 @@ function RolesPermissionsPanel({ workspaceId }: { workspaceId: string }) {
     const res: any = await updateRolePermissionsAction(workspaceId, matrix);
     setSaving(false);
     if (res?.error) setError(res.error);
-    else { setSavedAt(Date.now()); setTimeout(() => setSavedAt(null), 2000); }
+    else {
+      setSavedAt(Date.now());
+      setTimeout(() => setSavedAt(null), 2000);
+      // Refresh workspace context so the current admin's own myPermissions update immediately
+      refresh();
+    }
   };
 
   if (loading) {

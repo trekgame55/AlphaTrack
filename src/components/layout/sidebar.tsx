@@ -8,7 +8,7 @@ import {
   Calendar, Kanban, BookUser, Link2, Settings2, DatabaseZap,
 } from "lucide-react";
 import { generateInviteLink } from "@/actions/workspace";
-import { useWorkspace } from "@/lib/workspace-context";
+import { useWorkspace, usePermission } from "@/lib/workspace-context";
 import { useState } from "react";
 import { UserProfileWidget } from "./user-profile-widget";
 
@@ -23,23 +23,23 @@ export function Sidebar({ isOpen, setIsOpen }: SidebarProps) {
   const [inviteLink, setInviteLink] = useState("");
   const [copied, setCopied] = useState(false);
 
+  const canTasks     = usePermission("tasks.view");
+  const canDocuments = usePermission("documents.view");
+  const canContacts  = usePermission("contacts.view");
+
   const mainLinks = [
-    { name: "Мои задачи",   href: "/tasks",      icon: <CheckCircle2  className="w-[18px] h-[18px]" /> },
-    { name: "Документы",    href: "/documents",  icon: <FileText      className="w-[18px] h-[18px]" /> },
-    { name: "Контакты",     href: "/contacts",   icon: <BookUser      className="w-[18px] h-[18px]" /> },
-  ];
+    canTasks     && { name: "Мои задачи",   href: "/tasks",      icon: <CheckCircle2  className="w-[18px] h-[18px]" /> },
+    canDocuments && { name: "Документы",    href: "/documents",  icon: <FileText      className="w-[18px] h-[18px]" /> },
+    canContacts  && { name: "Контакты",     href: "/contacts",   icon: <BookUser      className="w-[18px] h-[18px]" /> },
+  ].filter(Boolean) as { name: string; href: string; icon: React.ReactNode }[];
 
   const planningLinks = [
-    { name: "Неделя",       href: "/week",       icon: <CalendarDays  className="w-[18px] h-[18px]" /> },
-    { name: "Доска",        href: "/board",      icon: <Kanban        className="w-[18px] h-[18px]" /> },
-  ];
+    canTasks && { name: "Неделя",       href: "/week",       icon: <CalendarDays  className="w-[18px] h-[18px]" /> },
+    canTasks && { name: "Доска",        href: "/board",      icon: <Kanban        className="w-[18px] h-[18px]" /> },
+  ].filter(Boolean) as { name: string; href: string; icon: React.ReactNode }[];
 
-  const otherLinks = [
-    { name: "Шаблоны",      href: "/templates",           icon: <LayoutTemplate className="w-[18px] h-[18px]" /> },
-    { name: "Архив",        href: "/archive",              icon: <Archive         className="w-[18px] h-[18px]" /> },
-    // { name: "Настройки",    href: "/settings",             icon: <Settings2       className="w-[18px] h-[18px]" /> },
-    // { name: "База данных",  href: "/settings/database",    icon: <DatabaseZap     className="w-[18px] h-[18px]" /> },
-  ];
+  // /templates and /archive pages don't exist yet — hiding links to avoid 404s
+  const otherLinks: { name: string; href: string; icon: React.ReactNode }[] = [];
 
   const renderLink = (link: { name: string; href: string; icon: React.ReactNode }) => {
     const active = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));

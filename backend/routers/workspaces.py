@@ -11,6 +11,7 @@ from auth import create_token
 from permissions import (
     PERMISSION_KEYS, CONFIGURABLE_ROLES, DEFAULTS,
     seed_defaults, get_matrix, set_matrix, get_user_permissions,
+    require_permission,
 )
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -151,10 +152,14 @@ def get_members(workspace_id: str, db: Session = Depends(get_db), user: User = D
 
 @router.delete("/{workspace_id}/members/{member_id}")
 def remove_member(workspace_id: str, member_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    _check_member(db, workspace_id, user.id)
+    me = _check_member(db, workspace_id, user.id)
+    _require_admin(me)
     member = db.query(WorkspaceMember).filter_by(id=member_id, workspaceId=workspace_id).first()
     if not member:
         raise HTTPException(404, "Member not found")
+    ws = db.query(Workspace).filter_by(id=workspace_id).first()
+    if ws and ws.ownerId == member.userId:
+        raise HTTPException(400, "Cannot remove the workspace owner")
     db.delete(member)
     db.commit()
     return {"ok": True}
@@ -176,8 +181,12 @@ def generate_invite(
     user: User = Depends(get_current_user),
 ):
     me = _check_member(db, workspace_id, user.id)
-    _require_admin(me)
-    role = (body.role if body and body.role else "viewer")
+    require_permission(db, workspace_id, user.id, "workspace.invite")
+    # Non-admins may not create admin-level invites
+    requested_role = (body.role if body and body.role else "viewer")
+    if me.role not in ("admin_plus", "admin") and requested_role in ("admin_plus", "admin"):
+        raise HTTPException(403, "Only admins can invite admins")
+    role = requested_role
     if role not in VALID_ROLES:
         raise HTTPException(400, "Invalid role")
     token = create_token()
@@ -196,7 +205,7 @@ def generate_invite(
 @router.get("/{workspace_id}/invites")
 def list_invites(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     me = _check_member(db, workspace_id, user.id)
-    _require_admin(me)
+    require_permission(db, workspace_id, user.id, "workspace.invite")
     invites = db.query(WorkspaceInvite).filter_by(workspaceId=workspace_id).order_by(WorkspaceInvite.createdAt.desc()).all()
     return [
         {
@@ -214,7 +223,7 @@ def list_invites(workspace_id: str, db: Session = Depends(get_db), user: User = 
 @router.delete("/{workspace_id}/invites/{invite_id}")
 def revoke_invite(workspace_id: str, invite_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     me = _check_member(db, workspace_id, user.id)
-    _require_admin(me)
+    require_permission(db, workspace_id, user.id, "workspace.invite")
     inv = db.query(WorkspaceInvite).filter_by(id=invite_id, workspaceId=workspace_id).first()
     if not inv:
         raise HTTPException(404, "Invite not found")

@@ -12,7 +12,8 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown, ChevronRight, Plus, Flag, GripVertical,
 } from "lucide-react";
-import { useWorkspace, usePermission } from "@/lib/workspace-context";
+import { useWorkspace, usePermission, usePermissionStatus } from "@/lib/workspace-context";
+import { NoAccess } from "@/components/no-access";
 import { listTasks, createTask, updateTask, deleteTask } from "@/actions/tasks";
 import { TaskModal } from "@/components/task-modal";
 import { canCompleteTask } from "@/lib/permissions";
@@ -180,6 +181,7 @@ function GroupDropZone({ groupId, isOver }: { groupId: string; isOver: boolean }
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TasksPage() {
   const { workspace, currentUser } = useWorkspace();
+  const viewStatus    = usePermissionStatus("tasks.view");
   const canCreateTask = usePermission("tasks.create");
   const canDeleteTask = usePermission("tasks.delete");
 
@@ -417,6 +419,9 @@ export default function TasksPage() {
       updateTask(aTask.id, { group: targetGroup, dueDate: newDue ?? null } as any);
     }
   };
+
+  if (viewStatus === "loading") return null;
+  if (viewStatus === "denied")  return <NoAccess />;
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">

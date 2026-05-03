@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import { getUserWorkspace, getUserWorkspaces } from "@/actions/workspace";
 import { listContacts, listTags } from "@/actions/contacts";
 import { useStatusStore } from "@/lib/statuses";
+import { useAppStore } from "@/lib/store";
 
 export type WsUser = {
   id: string;
@@ -90,6 +91,14 @@ export function usePermission(key: string): boolean {
   return Boolean(myPermissions?.[key]);
 }
 
+/** Returns "loading" | "allowed" | "denied" — useful for gating pages without a flash of NoAccess during initial workspace load. */
+export function usePermissionStatus(key: string): "loading" | "allowed" | "denied" {
+  const { loading, workspace, myRole, myPermissions } = useContext(WorkspaceContext);
+  if (loading || !workspace) return "loading";
+  if (myRole === "admin_plus" || myRole === "admin") return "allowed";
+  return myPermissions?.[key] ? "allowed" : "denied";
+}
+
 export function WorkspaceProvider({ userId, children }: { userId: string; children: ReactNode }) {
   const [workspace,        setWorkspace]        = useState<Workspace | null>(null);
   const [userWorkspaces,   setUserWorkspaces]   = useState<{ id: string; name: string; slug: string }[]>([]);
@@ -105,6 +114,10 @@ export function WorkspaceProvider({ userId, children }: { userId: string; childr
     setWorkspace(null);
     setContacts([]);
     setTags([]);
+    // Clear cross-workspace data leaks (tasks/documents/projects/members live in a global zustand store)
+    const store = useAppStore.getState();
+    store.setTasks([]);
+    store.setDocuments([]);
     setActiveWorkspaceId(id);
     if (typeof window !== "undefined") localStorage.setItem("alphatrack_active_ws", id);
     setTick(t => t + 1);

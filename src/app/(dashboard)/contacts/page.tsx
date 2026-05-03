@@ -5,7 +5,8 @@ import {
   Search, Plus, Phone, Copy, Mail, Building2, X, Check,
   UserCircle2, Trash2, ChevronDown,
 } from "lucide-react";
-import { useWorkspace, WsContact } from "@/lib/workspace-context";
+import { useWorkspace, usePermission, usePermissionStatus, WsContact } from "@/lib/workspace-context";
+import { NoAccess } from "@/components/no-access";
 import { createContact, updateContact as updateContactAction, deleteContact as deleteContactAction } from "@/actions/contacts";
 import type { ContactPhone } from "@/lib/mock-data";
 
@@ -227,10 +228,12 @@ function ContactCard({
   contact,
   onEdit,
   onDelete,
+  canManage,
 }: {
   contact: WsContact;
   onEdit: () => void;
   onDelete: () => void;
+  canManage: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -256,20 +259,24 @@ function ContactCard({
           )}
         </div>
         <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-            title="Редактировать"
-          >
-            <UserCircle2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
-            title="Удалить"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {canManage && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                title="Редактировать"
+              >
+                <UserCircle2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                title="Удалить"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          )}
           <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${expanded ? "rotate-180" : ""}`} />
         </div>
       </div>
@@ -347,6 +354,8 @@ const ALPHABET = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭ
 
 export default function ContactsPage() {
   const { workspace, contacts: wsContacts, setContacts } = useWorkspace();
+  const viewStatus = usePermissionStatus("contacts.view");
+  const canManage = usePermission("contacts.manage");
 
   const [search,   setSearch]   = useState("");
   const [modal,    setModal]    = useState<{ contact?: WsContact } | null>(null);
@@ -407,6 +416,9 @@ export default function ContactsPage() {
     await deleteContactAction(id);
   };
 
+  if (viewStatus === "loading") return null;
+  if (viewStatus === "denied")  return <NoAccess />;
+
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">
       {modal !== null && (
@@ -433,13 +445,15 @@ export default function ContactsPage() {
             </button>
           )}
         </div>
-        <button
-          onClick={() => setModal({})}
-          className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Добавить контакт</span>
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setModal({})}
+            className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/80 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Добавить контакт</span>
+          </button>
+        )}
       </div>
 
       {/* Stats bar */}
@@ -454,7 +468,7 @@ export default function ContactsPage() {
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <UserCircle2 className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm">Нет контактов{search ? " по запросу" : ""}</p>
-            {!search && (
+            {!search && canManage && (
               <button onClick={() => setModal({})} className="mt-3 text-sm text-primary hover:underline">
                 + Добавить первый контакт
               </button>
@@ -481,6 +495,7 @@ export default function ContactsPage() {
                   contact={c}
                   onEdit={() => setModal({ contact: c })}
                   onDelete={() => handleDelete(c.id)}
+                  canManage={canManage}
                 />
               ))}
             </div>

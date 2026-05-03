@@ -118,6 +118,7 @@ def _serialize_task(task: Task) -> dict:
 @router.get("")
 def list_tasks(workspace_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _check_member(db, workspace_id, user.id)
+    require_permission(db, workspace_id, user.id, "tasks.view")
     tasks = (
         db.query(Task)
         .options(
@@ -349,6 +350,7 @@ def get_task_activity(task_id: str, db: Session = Depends(get_db), user: User = 
     if not task:
         raise HTTPException(404, "Task not found")
     _check_member(db, task.workspaceId, user.id)
+    require_permission(db, task.workspaceId, user.id, "tasks.view")
 
     rows = (
         db.query(Activity)

@@ -7,8 +7,7 @@ import {
   Save, Trash2, LogOut, Plus, Copy, Check, AlertTriangle, Info, X,
 } from "lucide-react";
 
-import { useAppStore } from "@/lib/store";
-import { ROLE_ORDER, ROLE_META, RoleConfig, Role } from "@/lib/mock-data";
+import { ROLE_ORDER, ROLE_META, Role } from "@/lib/mock-data";
 import { useWorkspace } from "@/lib/workspace-context";
 import {
   generateInviteLink, listInvitesAction, revokeInviteAction,
@@ -17,6 +16,7 @@ import {
 } from "@/actions/workspace";
 import { updateProfile, changePassword } from "@/actions/auth";
 import type { InviteDTO } from "@/lib/api";
+import { RolesPermissionsPanel } from "@/components/layout/workspace-settings-modal";
 
 type Tab = "profile" | "workspace" | "members" | "invites" | "permissions";
 
@@ -27,13 +27,6 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: "invites",     label: "Инвайты",      icon: Link2 },
   { id: "permissions", label: "Права",        icon: Shield },
 ];
-
-const PERMISSION_LABELS: Record<keyof RoleConfig, string> = {
-  canEditTask:      "Редактировать задачи",
-  canCompleteTask:  "Завершать задачи",
-  canManageMembers: "Управлять участниками",
-  canChangeRoles:   "Изменять роли",
-};
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>("profile");
@@ -559,54 +552,21 @@ function InvitesTab() {
   );
 }
 
-// ── Permissions tab (existing matrix) ─────────────────────────────────────────
+// ── Permissions tab (server-backed matrix) ───────────────────────────────────
 
 function PermissionsTab() {
-  const rolePermissions = useAppStore((s) => s.rolePermissions);
-  const updateRolePermissions = useAppStore((s) => s.updateRolePermissions);
-
+  const { workspace, myRole } = useWorkspace();
+  if (!workspace) return <Banner kind="info">Нет активного пространства</Banner>;
+  const canManage = myRole === "admin_plus" || myRole === "admin";
+  if (!canManage) {
+    return <Banner kind="info">Только администраторы могут изменять права ролей</Banner>;
+  }
   return (
-    <Card title="Матрица прав" description="Глобальные права для каждой роли. Владелец (Администратор+) имеет полный доступ.">
-      <div className="overflow-x-auto custom-scrollbar pb-2">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr>
-              <th className="py-3 px-4 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Право / Действие
-              </th>
-              {ROLE_ORDER.map((role) => (
-                <th key={role} className="py-3 px-4 border-b border-border min-w-[140px]">
-                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium w-fit ${ROLE_META[role].color}`}>
-                    {ROLE_META[role].label}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(Object.keys(PERMISSION_LABELS) as (keyof RoleConfig)[]).map((perm) => (
-              <tr key={perm} className="hover:bg-white/[0.02] transition border-b border-border/50 last:border-0">
-                <td className="py-3 px-4 text-sm font-medium text-foreground">{PERMISSION_LABELS[perm]}</td>
-                {ROLE_ORDER.map((role) => {
-                  const isOwner = role === "admin_plus";
-                  const checked = rolePermissions[role]?.[perm] ?? false;
-                  return (
-                    <td key={`${role}-${perm}`} className="py-3 px-4">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={isOwner}
-                        onChange={(e) => updateRolePermissions(role, { [perm]: e.target.checked })}
-                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary bg-secondary/50 disabled:opacity-40"
-                      />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <Card
+      title="Матрица прав"
+      description="Настройте, что видят и могут делать Участники и Наблюдатели. Владелец и администраторы всегда имеют полный доступ."
+    >
+      <RolesPermissionsPanel workspaceId={workspace.id} />
     </Card>
   );
 }
