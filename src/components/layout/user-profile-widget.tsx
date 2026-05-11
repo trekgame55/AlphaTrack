@@ -95,7 +95,7 @@ export function UserProfileWidget() {
         {isOpen && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-            <div className="absolute bottom-full left-3 w-[220px] mb-2 bg-[#1a1a1a] border border-border rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1">
+            <div className="absolute top-full left-3 w-[220px] mt-2 bg-[#1a1a1a] border border-border rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1">
               <div className="px-2 py-1.5 mb-1 border-b border-border/50">
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Ваши команды</span>
               </div>

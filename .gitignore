@@ -14,3 +14,4 @@ deploy/deploy.sh
 deploy/setup.sh
 flutter
 lan9es_app
+backend/.env

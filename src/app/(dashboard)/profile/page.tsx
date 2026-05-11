@@ -29,10 +29,11 @@ export default function ProfilePage() {
   const handleConnectTg = async () => {
     setLoadingTg(true);
     const res = await generateTelegramLinkToken();
+    setLoadingTg(false);
     if (res?.link) {
+      window.open(res.link, "_blank", "noopener,noreferrer");
       setTgLink(res.link);
     }
-    setLoadingTg(false);
   };
 
   const handleDisconnectTg = async () => {
@@ -204,50 +205,47 @@ export default function ProfilePage() {
             {!tgStatus ? (
               <div className="text-sm text-muted-foreground">Загрузка...</div>
             ) : tgStatus.connected ? (
-              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 p-4 rounded-lg">
+              <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#0088cc]/20 text-[#0088cc] rounded-full flex items-center justify-center font-bold">
+                  <div className="w-10 h-10 bg-[#0088cc]/20 text-[#0088cc] rounded-full flex items-center justify-center font-bold text-sm">
                     TG
                   </div>
                   <div>
-                    <div className="font-medium text-foreground">Подключено</div>
+                    <div className="font-medium text-foreground flex items-center gap-2">
+                      Подключено
+                      <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">✓ Активно</span>
+                    </div>
                     <div className="text-sm text-muted-foreground">@{tgStatus.username || "Пользователь"}</div>
                   </div>
                 </div>
                 <button
                   onClick={handleDisconnectTg}
                   disabled={loadingTg}
-                  className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-md text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-md text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
+                  {loadingTg && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   Отключить
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div>
                 <button
                   onClick={handleConnectTg}
                   disabled={loadingTg}
-                  className="px-4 py-2 bg-[#0088cc] text-white hover:bg-[#0088cc]/90 rounded-md text-sm font-medium transition-colors"
+                  className="inline-flex items-center gap-2.5 px-5 py-2.5 bg-[#0088cc] text-white hover:bg-[#007ab8] active:scale-[0.98] rounded-lg text-sm font-semibold transition-all disabled:opacity-50 shadow-lg shadow-[#0088cc]/20"
                 >
-                  Подключить Telegram
+                  {loadingTg ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                    </svg>
+                  )}
+                  {loadingTg ? "Открываю бот..." : "Подключить Telegram"}
                 </button>
-                
-                {tgLink && (
-                  <div className="mt-4 p-4 border border-border rounded-lg bg-secondary/30">
-                    <p className="text-sm text-foreground mb-2 font-medium">Перейдите по ссылке для привязки аккаунта:</p>
-                    <a 
-                      href={tgLink} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[#0088cc] text-sm break-all hover:underline"
-                    >
-                      {tgLink}
-                    </a>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Ссылка действительна 15 минут
-                    </p>
-                  </div>
-                )}
+                <p className="text-xs text-muted-foreground mt-3">
+                  Нажмите — откроется Telegram бот, нажмите «Запустить» (Start) — аккаунт привяжется автоматически.
+                </p>
               </div>
             )}
           </div>

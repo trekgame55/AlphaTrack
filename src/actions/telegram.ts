@@ -1,62 +1,62 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 
-const API_URL = "http://127.0.0.1:8000/api";
+const API_URL = process.env.PYTHON_BACKEND_URL ?? "http://127.0.0.1:8000";
+const COOKIE = "alphatrack_session";
+
+async function getToken() {
+  const store = await cookies();
+  return store.get(COOKIE)?.value ?? null;
+}
 
 export async function getTelegramStatus() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("session_token")?.value;
+  const token = await getToken();
   if (!token) return { connected: false };
 
   try {
-    const res = await fetch(`${API_URL}/telegram/status`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await fetch(`${API_URL}/api/telegram/status`, {
+      headers: { "x-session-token": token },
       cache: "no-store",
     });
     if (!res.ok) return { connected: false };
     return await res.json();
-  } catch (error) {
+  } catch {
     return { connected: false };
   }
 }
 
 export async function generateTelegramLinkToken() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("session_token")?.value;
+  const token = await getToken();
   if (!token) return { error: "Не авторизован" };
 
   try {
-    const res = await fetch(`${API_URL}/telegram/link-token`, {
+    const res = await fetch(`${API_URL}/api/telegram/link-token`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "x-session-token": token },
     });
     if (!res.ok) {
       const data = await res.json();
       return { error: data.detail || "Ошибка" };
     }
     return await res.json();
-  } catch (error) {
+  } catch {
     return { error: "Ошибка соединения" };
   }
 }
 
 export async function disconnectTelegram() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("session_token")?.value;
+  const token = await getToken();
   if (!token) return { error: "Не авторизован" };
 
   try {
-    const res = await fetch(`${API_URL}/telegram/disconnect`, {
+    const res = await fetch(`${API_URL}/api/telegram/disconnect`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "x-session-token": token },
     });
     if (!res.ok) return { error: "Ошибка" };
-    
-    revalidatePath("/settings");
     return { success: true };
-  } catch (error) {
+  } catch {
     return { error: "Ошибка соединения" };
   }
 }

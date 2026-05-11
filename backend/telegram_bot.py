@@ -176,12 +176,31 @@ def run_bot_in_thread():
     import asyncio
     import threading
 
+    async def _run_bot():
+        application = Application.builder().token(BOT_TOKEN).build()
+        application.add_handler(CommandHandler("start", start_command))
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
+        logger.info("Telegram bot polling started")
+        # Keep running until cancelled
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await application.updater.stop()
+            await application.stop()
+            await application.shutdown()
+
     def run():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        application = Application.builder().token(BOT_TOKEN).build()
-        application.add_handler(CommandHandler("start", start_command))
-        application.run_polling(drop_pending_updates=True)
+        try:
+            loop.run_until_complete(_run_bot())
+        except Exception as e:
+            logger.error(f"Telegram bot error: {e}")
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
+    logger.info("Telegram bot thread started")
