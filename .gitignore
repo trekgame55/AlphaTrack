@@ -12,3 +12,5 @@ backend/backend.log
 tsconfig.tsbuildinfo
 deploy/deploy.sh
 deploy/setup.sh
+flutter
+lan9es_app
