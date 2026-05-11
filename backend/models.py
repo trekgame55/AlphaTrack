@@ -32,6 +32,7 @@ class User(Base):
     memberships       = relationship("WorkspaceMember", back_populates="user",      cascade="all, delete")
     taskAssignees     = relationship("TaskAssignee",    back_populates="user",      cascade="all, delete")
     comments          = relationship("Comment",         back_populates="author")
+    fcm_tokens        = relationship("FcmToken",        back_populates="user",      cascade="all, delete")
 
 
 class Session(Base):
@@ -79,6 +80,21 @@ class WorkspaceMember(Base):
 
     workspace = relationship("Workspace", back_populates="members")
     user      = relationship("User",      back_populates="memberships")
+
+
+class RolePermission(Base):
+    """One row per (workspace, role, permission_key) marking whether the role has that permission.
+    Owner (admin_plus) and admin always have all permissions implicitly — not stored here.
+    Configured roles: member, viewer.
+    """
+    __tablename__ = "role_permissions"
+    __table_args__ = (UniqueConstraint("workspaceId", "role", "permKey"),)
+
+    id          = Column(String, primary_key=True, default=gen_id)
+    workspaceId = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    role        = Column(String, nullable=False)
+    permKey     = Column(String, nullable=False)
+    allowed     = Column(Boolean, default=True, nullable=False)
 
 
 class WorkspaceInvite(Base):
@@ -152,6 +168,8 @@ class Task(Base):
     tags      = relationship("TaskTag",      back_populates="task", cascade="all, delete")
     comments  = relationship("Comment",      back_populates="task", cascade="all, delete",
                              order_by="Comment.createdAt")
+    activities = relationship("Activity",    back_populates="task", cascade="all, delete",
+                              order_by="Activity.createdAt")
 
 
 class TaskAssignee(Base):
@@ -186,6 +204,20 @@ class Comment(Base):
 
     task   = relationship("Task", back_populates="comments")
     author = relationship("User", back_populates="comments")
+
+
+class Activity(Base):
+    __tablename__ = "activities"
+
+    id        = Column(String, primary_key=True, default=gen_id)
+    taskId    = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    userId    = Column(String, ForeignKey("users.id"),                     nullable=True)
+    action    = Column(String, nullable=False)
+    details   = Column(Text,   nullable=True)
+    createdAt = Column(DateTime, server_default=func.now())
+
+    task = relationship("Task", back_populates="activities")
+    user = relationship("User")
 
 
 # ─── Contacts ─────────────────────────────────────────────────────────────────
@@ -234,6 +266,19 @@ class Document(Base):
 
     workspace = relationship("Workspace", back_populates="documents")
     author    = relationship("User")
+
+
+class FcmToken(Base):
+    """Stores one FCM push token per device per user."""
+    __tablename__ = "fcm_tokens"
+    __table_args__ = (UniqueConstraint("userId", "token"),)
+
+    id        = Column(String, primary_key=True, default=gen_id)
+    userId    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token     = Column(String, nullable=False)
+    createdAt = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="fcm_tokens")
 
 
 # ─── Telegram ─────────────────────────────────────────────────────────────────
