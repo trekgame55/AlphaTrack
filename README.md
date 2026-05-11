@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://i.pinimg.com/736x/69/28/47/6928479ed4557ca6a9ae3f7e986018b8.jpg" alt="AlphaTrack Logo" width="64" height="64" />
+<img src="https://i.pinimg.com/736x/89/21/3a/89213abdc4ab2e3abe5199371b9c964a.jpg" alt="AlphaTrack Logo" width="64" height="64" />
 
 # AlphaTrack
 
