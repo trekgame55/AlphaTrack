@@ -74,7 +74,7 @@ def register(body: RegisterRequest, response: Response, db: Session = Depends(ge
     db.commit()
 
     response.set_cookie(
-        "weeek_session", token,
+        "alphatrack_session", token,
         httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
     )
     return {"token": token, "user": user}
@@ -98,7 +98,7 @@ def login(body: LoginRequest, response: Response, db: Session = Depends(get_db))
     db.commit()
 
     response.set_cookie(
-        "weeek_session", token,
+        "alphatrack_session", token,
         httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30,
     )
     return {"token": token, "user": user}
@@ -113,7 +113,7 @@ def logout(
     if token:
         db.query(DbSession).filter(DbSession.token == token).delete()
         db.commit()
-    response.delete_cookie("weeek_session")
+    response.delete_cookie("alphatrack_session")
     return {"ok": True}
 
 

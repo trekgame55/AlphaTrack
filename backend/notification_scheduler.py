@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models import TaskAssignee, TelegramPendingNotification, TelegramAccount, TelegramNotification, Task
+from models import TelegramPendingNotification, TelegramAccount, TelegramNotification, Task
 from telegram_bot import send_task_notification, edit_task_notification, BOT_TOKEN
 from routers.tasks import _load_task, _serialize_task
 from fastapi.encoders import jsonable_encoder
@@ -56,7 +56,7 @@ async def notification_loop():
                     p.sent = True
                     db.commit()
 
-                # 3. Sync existing notifications
+                # Sync existing notifications when tasks are updated
                 recently_updated_tasks = db.query(Task).filter(Task.updatedAt >= now - timedelta(seconds=15)).all()
                 for task in recently_updated_tasks:
                     notifs = db.query(TelegramNotification).filter(TelegramNotification.taskId == task.id).all()

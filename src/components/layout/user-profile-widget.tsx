@@ -42,7 +42,7 @@ export function UserProfileWidget() {
     if (!confirm("Вы уверены, что хотите удалить эту команду?")) return;
     await deleteWorkspaceAction(id);
     if (workspace?.id === id) {
-      localStorage.removeItem("weeek_active_ws");
+      localStorage.removeItem("alphatrack_active_ws");
       window.location.reload();
     } else {
       refresh();
@@ -59,7 +59,7 @@ export function UserProfileWidget() {
   };
 
   const logout = () => {
-    document.cookie = "weeek_session=; path=/; max-age=0";
+    document.cookie = "alphatrack_session=; path=/; max-age=0";
     router.push("/login");
   };
 

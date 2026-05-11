@@ -1,178 +1,210 @@
+<div align="center">
+
+<img src="public/logo.png" alt="AlphaTrack Logo" width="64" height="64" />
+
 # AlphaTrack
 
-**AlphaTrack** is a modern self-hosted team task management system. All data stays on your own server — no third-party clouds.
+**Professional task management platform for teams**
+
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python)](https://python.org/)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-2CA5E0?style=flat-square&logo=telegram)](https://core.telegram.org/bots)
+
+</div>
 
 ---
 
-## Features
+## ✨ Features
 
-- **Tasks** — kanban, list, weekly planner, spreadsheet. Drag-and-drop between statuses and dates.
-- **Activity Log** — every task has a full history: who changed the status, assignee, tag, priority, or deadline.
-- **Comments** — threaded comments inside each task with avatars and timestamps.
-- **Projects** — group tasks by color-coded projects.
-- **Tags** — create and assign tags directly from the task modal.
-- **Contacts** — CRM contact list with phone numbers, linkable to tasks.
-- **Teams** — multi-user mode. Invite via one-time link with role selection.
-- **Roles** — Viewer / Member / Admin. Access control via settings.
-- **Documents** — built-in text editor for team notes.
-- **Spreadsheet** — editable data grid for all tasks.
-- **REST API** — fully documented via Swagger UI at `/api/docs`.
-- **Auto-backup** — SQLite database is automatically backed up on schedule.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
+| Feature | Description |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, TailwindCSS 4 |
-| UI | Lucide icons, shadcn/ui, dnd-kit |
-| Backend | FastAPI, Python 3.11+, SQLAlchemy, SQLite |
-| Server | Nginx + systemd (Debian/Ubuntu) |
+| 📋 **Task Board** | Kanban-style board with drag-and-drop support |
+| 📅 **Week View** | Calendar-based weekly overview of all tasks |
+| 👥 **Team Management** | Invite members, assign roles and permissions |
+| 📞 **Contacts** | CRM-style contact directory linked to tasks |
+| 📄 **Documents** | Rich text documents per workspace |
+| 🔔 **Telegram Notifications** | Real-time bot notifications when assigned to tasks |
+| 🤖 **Telegram Bot** | Manage tasks directly from Telegram — view, navigate, and complete tasks |
+| 🔐 **Authentication** | Secure session-based auth with 30-day sessions |
+| 👤 **Profile Management** | Update name, change password, connect/disconnect Telegram |
+| 🏷 **Tags & Projects** | Organize tasks with colored tags and projects |
 
 ---
 
-## Quick Start (local)
+## 🤖 Telegram Bot
 
-```bash
-git clone <repo> alphatrack && cd alphatrack
-npm install
-pip install -r backend/requirements.txt
-bash start.sh
-```
+AlphaTrack includes a fully integrated Telegram bot for task management on the go.
 
-Open **http://localhost:4040** — register and create your team.  
-API docs: **http://localhost:8000/api/docs**
+### Bot Commands
 
----
-
-## Deploy to Debian Server
-
-```bash
-rsync -az --exclude node_modules --exclude .next --exclude backend/.venv \
-  ./ root@YOUR_IP:/opt/alphatrack/
-
-ssh root@YOUR_IP
-cp /opt/alphatrack/.env.example /opt/alphatrack/.env
-nano /opt/alphatrack/.env
-bash /opt/alphatrack/deploy/setup.sh
-```
-
-**Full step-by-step installation from a clean Debian** (server prep, systemd, nginx, SSL, backups, troubleshooting): see [INSTALL_EN.md](./INSTALL_EN.md).
-
-Quick re-deploy from your local machine:
-```bash
-bash deploy/deploy.sh root@YOUR_IP
-```
-
-Architecture & API reference: [DOCUMENTATION_EN.md](./DOCUMENTATION_EN.md)
-
----
-
-## Project Structure
-
-```
-alphatrack/
-├── src/
-│   ├── app/          # Next.js pages (App Router)
-│   ├── components/   # UI components
-│   ├── actions/      # Server Actions (API calls)
-│   └── lib/          # Helpers, types, store
-├── backend/
-│   ├── routers/      # FastAPI routers (tasks, auth, workspaces…)
-│   ├── models.py     # SQLAlchemy models
-│   ├── schemas.py    # Pydantic schemas
-│   └── main.py       # Entry point
-└── deploy/           # Systemd services, nginx, deploy scripts
-```
-
----
----
-
-# AlphaTrack (Русский)
-
-**AlphaTrack** — современная система управления задачами и командной работой. Полностью self-hosted: данные хранятся на вашем сервере, никаких сторонних облаков.
-
----
-
-## Что внутри
-
-- **Задачи** — канбан, список, недельный планировщик, таблица. Drag-and-drop между статусами и датами.
-- **История изменений** — каждая задача имеет журнал: кто и когда изменил статус, исполнителя, тег, приоритет, сроки.
-- **Комментарии** — треды внутри задачи с аватарами и временными метками.
-- **Проекты** — группировка задач по проектам с цветовой маркировкой.
-- **Теги** — создавай и назначай теги задачам прямо из модального окна.
-- **Контакты** — CRM-список с телефонами, привязка контакта к задаче.
-- **Команды** — многопользовательский режим. Приглашение по одноразовой ссылке с выбором роли.
-- **Роли** — Наблюдатель / Участник / Администратор. Управление доступом через настройки.
-- **Документы** — встроенный текстовый редактор для командных заметок.
-- **Таблица (Spreadsheet)** — редактируемая сетка данных.
-- **REST API** — полностью задокументированный через Swagger UI `/api/docs`.
-- **Авто-бэкап** — SQLite база автоматически бэкапируется по расписанию.
-
----
-
-## Стек технологий
-
-| Слой | Технология |
+| Command | Description |
 |---|---|
-| Frontend | Next.js 16, React 19, TypeScript, TailwindCSS 4 |
-| UI-компоненты | Lucide icons, shadcn/ui, dnd-kit |
-| Backend | FastAPI, Python 3.11+, SQLAlchemy, SQLite |
-| Сервер | Nginx + systemd (Debian/Ubuntu) |
+| `/start` | Connect your Telegram account via the profile page link |
+| `/tasks` | Quick list of your active assigned tasks |
+| `/active` | View tasks currently in progress |
+
+### Bot Features
+- **Persistent bottom keyboard** with `📋 Все задачи` and `⚡ Активные задачи` buttons
+- **Paginated task list** — 5 tasks per page with Previous/Next navigation
+- **Full task detail view** — status, priority, dates, assignees, tags, and contact with copyable phone numbers
+- **Complete tasks** directly from the bot (only if you are an assignee)
+- **Instant notifications** when you are assigned to a task
+
+### Setting Up Telegram Integration
+
+1. Go to your profile page on the site
+2. Click **"Подключить Telegram"** (Connect Telegram)
+3. The bot will open automatically — press **Start**
+4. Your account is now linked. Notifications will be sent for new task assignments.
 
 ---
 
-## Быстрый старт (локально)
+## 🏗️ Architecture
+
+```
+AlphaTrack/
+├── src/                        # Next.js 16 frontend
+│   ├── app/(dashboard)/        # Dashboard pages
+│   │   ├── tasks/              # Task list & board
+│   │   ├── week/               # Week calendar view
+│   │   ├── contacts/           # Contact directory
+│   │   ├── documents/          # Document editor
+│   │   ├── board/              # Kanban board
+│   │   ├── profile/            # User profile & Telegram settings
+│   │   └── settings/           # Workspace settings
+│   ├── components/             # Shared UI components
+│   ├── actions/                # Next.js server actions
+│   └── lib/                    # Utilities & context
+│
+└── backend/                    # FastAPI Python backend
+    ├── main.py                 # App entrypoint & startup
+    ├── models.py               # SQLAlchemy ORM models
+    ├── deps.py                 # Auth dependencies
+    ├── telegram_bot.py         # Telegram bot (PTB)
+    ├── notification_scheduler.py # Async notification queue
+    ├── routers/
+    │   ├── auth.py             # Authentication endpoints
+    │   ├── tasks.py            # Task CRUD + assignee management
+    │   ├── contacts.py         # Contact management
+    │   ├── documents.py        # Document CRUD
+    │   ├── workspaces.py       # Workspace & member management
+    │   └── telegram.py         # Telegram link & status endpoints
+    └── backups/                # Automated hourly SQLite backups
+```
+
+### Tech Stack
+
+**Frontend**
+- [Next.js 16](https://nextjs.org/) (App Router, Server Actions, Standalone build)
+- [Tailwind CSS](https://tailwindcss.com/) + custom design tokens
+- [Zustand](https://github.com/pmndrs/zustand) for state management
+- [Lucide React](https://lucide.dev/) for icons
+
+**Backend**
+- [FastAPI](https://fastapi.tiangolo.com/) with [Uvicorn](https://www.uvicorn.org/)
+- [SQLAlchemy](https://www.sqlalchemy.org/) ORM + SQLite
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v20+
+- [Passlib](https://passlib.readthedocs.io/) for bcrypt password hashing
+
+---
+
+## 🚀 Deployment
+
+### Prerequisites
+- Ubuntu/Debian server with Nginx
+- Python 3.11+ and Node.js 18+
+- A Telegram Bot token from [@BotFather](https://t.me/BotFather)
+
+### 1. Clone the repository
 
 ```bash
-git clone <repo> alphatrack && cd alphatrack
+git clone https://github.com/trekgame55/AlphaTrack.git /opt/alphatrack
+cd /opt/alphatrack
+```
+
+### 2. Configure the backend
+
+```bash
+cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# Create environment file
+cat > .env << EOF
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_BOT_USERNAME=your_bot_username_here
+EOF
+```
+
+### 3. Configure the frontend
+
+```bash
+cd /opt/alphatrack
 npm install
-pip install -r backend/requirements.txt
-bash start.sh
+npm run build
 ```
 
-Открой **http://localhost:4040** — зарегистрируйся и создай команду.  
-API-документация: **http://localhost:8000/api/docs**
+### 4. Set up Systemd services
+
+Copy the service files to `/etc/systemd/system/` (see `alphatrack-backend.service` and `alphatrack-frontend.service`), then:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now alphatrack-backend alphatrack-frontend
+```
+
+### 5. Configure Nginx
+
+```nginx
+server {
+    server_name yourdomain.com;
+    location / {
+        proxy_pass http://localhost:4040;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+    location /api/ {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+    }
+}
+```
 
 ---
 
-## Деплой на Debian-сервер
+## 🔄 Updating (One Command)
 
 ```bash
-rsync -az --exclude node_modules --exclude .next --exclude backend/.venv \
-  ./ root@YOUR_IP:/opt/alphatrack/
-
-ssh root@YOUR_IP
-cp /opt/alphatrack/.env.example /opt/alphatrack/.env
-nano /opt/alphatrack/.env
-bash /opt/alphatrack/deploy/setup.sh
+/opt/alphatrack/update.sh
 ```
 
-**Полная пошаговая установка с нуля на чистый Debian** (подготовка сервера, systemd, nginx, SSL, бэкапы, troubleshooting): см. [INSTALL_RU.md](./INSTALL_RU.md) · [English](./INSTALL_EN.md).
+This script automatically:
+1. Pulls the latest code from GitHub
+2. Installs any new dependencies
+3. Rebuilds the frontend (with static assets)
+4. Restarts both Systemd services
 
-Быстрое обновление с локальной машины:
-```bash
-bash deploy/deploy.sh root@YOUR_IP
-```
-
-Архитектура и описание API: [DOCUMENTATION_RU.md](./DOCUMENTATION_RU.md)
+> **Note:** The `backend/.env` file is gitignored and must be configured manually on the server.
 
 ---
 
-## Структура проекта
+## 🔐 Security Notes
 
-```
-alphatrack/
-├── src/
-│   ├── app/          # Next.js страницы (App Router)
-│   ├── components/   # UI-компоненты
-│   ├── actions/      # Server Actions (вызовы к API)
-│   └── lib/          # Хелперы, типы, store
-├── backend/
-│   ├── routers/      # FastAPI роутеры (tasks, auth, workspaces…)
-│   ├── models.py     # SQLAlchemy модели
-│   ├── schemas.py    # Pydantic схемы
-│   └── main.py       # Точка входа
-└── deploy/           # Systemd-сервисы, nginx, скрипты деплоя
-```
+- Sessions are HTTP-only cookies with 30-day expiry
+- Passwords are hashed with bcrypt (passlib)
+- Telegram link tokens are single-use and expire after 15 minutes
+- The backend `.env` file is never committed to the repository
+- All API routes require session authentication
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+Built with ❤️ by the AlphaTrack team
+</div>
