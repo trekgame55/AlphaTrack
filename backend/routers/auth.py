@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, Session as DbSession, Workspace, WorkspaceMember, Tag
@@ -7,7 +7,11 @@ from auth import hash_password, verify_password, create_token, session_expires_a
 from pydantic import BaseModel
 from typing import Optional
 from deps import get_current_user
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import uuid
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,7 +24,8 @@ def check_email(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/register", response_model=SessionOut)
-def register(body: RegisterRequest, response: Response, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, body: RegisterRequest, response: Response, db: Session = Depends(get_db)):
     email = body.email.lower().strip()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(400, "Email already registered")
@@ -81,7 +86,8 @@ def register(body: RegisterRequest, response: Response, db: Session = Depends(ge
 
 
 @router.post("/login", response_model=SessionOut)
-def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, body: LoginRequest, response: Response, db: Session = Depends(get_db)):
     email = body.email.lower().strip()
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(body.password, user.password):

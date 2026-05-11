@@ -8,3 +8,5 @@ python-jose==3.3.0
 python-multipart==0.0.9
 email-validator==2.1.0
 python-telegram-bot>=20.0
+slowapi
+bleach

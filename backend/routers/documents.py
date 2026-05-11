@@ -5,7 +5,29 @@ from models import Document, WorkspaceMember, User
 from schemas import DocumentCreate, DocumentUpdate, DocumentOut
 from deps import get_current_user
 from permissions import require_permission
+import bleach
 import uuid
+
+# Allowed HTML tags/attrs for rich text content
+_ALLOWED_TAGS = [
+    "p", "br", "b", "strong", "i", "em", "u", "s", "strike",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "ul", "ol", "li", "blockquote", "pre", "code",
+    "a", "img", "table", "thead", "tbody", "tr", "th", "td",
+    "hr", "span", "div",
+]
+_ALLOWED_ATTRS = {
+    "a":   ["href", "title", "target", "rel"],
+    "img": ["src", "alt", "width", "height"],
+    "*":   ["class", "style"],
+}
+
+
+def _sanitize(content: str | None) -> str | None:
+    """Strip dangerous HTML while preserving rich text formatting."""
+    if content is None:
+        return None
+    return bleach.clean(content, tags=_ALLOWED_TAGS, attributes=_ALLOWED_ATTRS, strip=True)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -47,7 +69,7 @@ def create_document(workspace_id: str, body: DocumentCreate, db: Session = Depen
     doc = Document(
         id=str(uuid.uuid4()),
         title=body.title[:300],
-        content=body.content,
+        content=_sanitize(body.content),
         icon=body.icon,
         workspaceId=workspace_id,
         authorId=user.id,
@@ -69,7 +91,7 @@ def update_document(doc_id: str, body: DocumentUpdate, db: Session = Depends(get
     if body.title is not None:
         doc.title = body.title[:300]
     if body.content is not None:
-        doc.content = body.content
+        doc.content = _sanitize(body.content)
     if body.icon is not None:
         doc.icon = body.icon
 
