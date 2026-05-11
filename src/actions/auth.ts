@@ -3,13 +3,29 @@
 import { cookies } from "next/headers";
 import { api, ApiError } from "@/lib/api";
 
-const COOKIE = "alphatrack_session";
+const COOKIE = "weeek_session";
 
 async function getToken(): Promise<string | null> {
   const store = await cookies();
   return store.get(COOKIE)?.value ?? null;
 }
 
+function setSessionCookie(token: string) {
+  // fire-and-forget — used in login/register only
+  cookies().then(store => {
+    const expires = new Date();
+    expires.setDate(expires.getDate() + 30);
+    store.set(COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      expires,
+      path: "/",
+      sameSite: "lax",
+    });
+  });
+}
+
+// ─── Check email ──────────────────────────────────────────────────────────────
 
 export async function checkEmailExists(email: string): Promise<boolean> {
   try {
@@ -20,6 +36,8 @@ export async function checkEmailExists(email: string): Promise<boolean> {
   }
 }
 
+// ─── Login ────────────────────────────────────────────────────────────────────
+
 export async function loginUser(rawEmail: string, rawPassword: string) {
   try {
     const data = await api.auth.login(rawEmail.trim().toLowerCase(), rawPassword);
@@ -28,7 +46,7 @@ export async function loginUser(rawEmail: string, rawPassword: string) {
     expires.setDate(expires.getDate() + 30);
     store.set(COOKIE, data.token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       expires,
       path: "/",
       sameSite: "lax",
@@ -39,11 +57,14 @@ export async function loginUser(rawEmail: string, rawPassword: string) {
       if (err.status === 401) return { error: "Неверный email или пароль" };
       return { error: err.message };
     }
+    console.error("[auth] loginUser error:", err);
     return { error: "Ошибка сервера. Попробуйте позже." };
   }
 }
 
-export async function registerUser(rawName: string, rawEmail: string, rawPassword: string, inviteToken?: string) {
+// ─── Register ─────────────────────────────────────────────────────────────────
+
+export async function registerUser(rawName: string, rawEmail: string, rawPassword: string) {
   if (!rawName?.trim())     return { error: "Введите ваше имя" };
   if (rawPassword.length < 6) return { error: "Пароль должен содержать минимум 6 символов" };
 
@@ -52,14 +73,13 @@ export async function registerUser(rawName: string, rawEmail: string, rawPasswor
       rawName.trim(),
       rawEmail.trim().toLowerCase(),
       rawPassword,
-      inviteToken,
     );
     const store = await cookies();
     const expires = new Date();
     expires.setDate(expires.getDate() + 30);
     store.set(COOKIE, data.token, {
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === "production",
       expires,
       path: "/",
       sameSite: "lax",
@@ -70,9 +90,12 @@ export async function registerUser(rawName: string, rawEmail: string, rawPasswor
       if (err.status === 400) return { error: "Email уже зарегистрирован" };
       return { error: err.message };
     }
+    console.error("[auth] registerUser error:", err);
     return { error: "Ошибка при регистрации. Попробуйте позже." };
   }
 }
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
 
 export async function logoutUser() {
   const store = await cookies();
@@ -83,6 +106,8 @@ export async function logoutUser() {
   store.delete(COOKIE);
   return { success: true };
 }
+
+// ─── Get current user (used by workspace context, middleware) ─────────────────
 
 export async function getCurrentUser() {
   const token = await getToken();
@@ -95,29 +120,16 @@ export async function getCurrentUser() {
   }
 }
 
-export { getToken };
-
-export async function updateProfile(data: { name?: string; email?: string }) {
+export async function updateProfileAction(data: { name?: string; password?: string; new_password?: string }) {
   const token = await getToken();
-  if (!token) return { error: "Нет авторизации" };
+  if (!token) return { error: "Не авторизован" };
   try {
-    const user = await api.auth.updateProfile(token, data);
-    return { user };
-  } catch (err: any) {
-    return { error: err?.message ?? "Не удалось обновить профиль" };
-  }
-}
-
-export async function changePassword(currentPassword: string, newPassword: string) {
-  const token = await getToken();
-  if (!token) return { error: "Нет авторизации" };
-  if (!currentPassword) return { error: "Введите текущий пароль" };
-  if (newPassword.length < 6) return { error: "Минимум 6 символов" };
-  try {
-    await api.auth.changePassword(token, currentPassword, newPassword);
+    await api.auth.updateProfile(token, data);
     return { success: true };
   } catch (err: any) {
-    if (err instanceof ApiError && err.status === 401) return { error: "Неверный текущий пароль" };
-    return { error: err?.message ?? "Не удалось сменить пароль" };
+    if (err instanceof ApiError) return { error: err.message };
+    return { error: "Ошибка при обновлении профиля" };
   }
 }
+
+export { getToken };

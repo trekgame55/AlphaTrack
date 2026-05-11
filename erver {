@@ -1,0 +1,24 @@
+[0;1;32m●[0m nginx.service - A high performance web server and a reverse proxy server
+     Loaded: loaded (]8;;file://lancorp/usr/lib/systemd/system/nginx.service\/usr/lib/systemd/system/nginx.service]8;;\; [0;1;32menabled[0m; preset: [0;1;32menabled[0m)
+     Active: [0;1;32mactive (running)[0m since Mon 2026-04-27 07:41:22 EDT; 6 days ago
+ Invocation: 24a97e975390460b984f9809363d70ee
+       Docs: ]8;;man:nginx(8)\man:nginx(8)]8;;\
+    Process: 305614 ExecReload=/usr/sbin/nginx -g daemon on; master_process on; -s reload (code=exited, status=0/SUCCESS)
+   Main PID: 405524 (nginx)
+      Tasks: 7[0;38;5;245m (limit: 19139)[0m
+     Memory: 6.6M (peak: 12.9M)
+        CPU: 7.621s
+     CGroup: /system.slice/nginx.service
+             ├─[0;38;5;245m305616 "nginx: worker process"[0m
+             ├─[0;38;5;245m305617 "nginx: worker process"[0m
+             ├─[0;38;5;245m305618 "nginx: worker process"[0m
+             ├─[0;38;5;245m305619 "nginx: worker process"[0m
+             ├─[0;38;5;245m305620 "nginx: worker process"[0m
+             ├─[0;38;5;245m305621 "nginx: worker process"[0m
+             └─[0;38;5;245m405524 "nginx: master process /usr/sbin/nginx -g daemon on; master_process on;"[0m
+
+Apr 27 07:41:22 lancorp systemd[1]: Starting nginx.service - A high performance web server and a reverse proxy server...
+Apr 27 07:41:22 lancorp systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server.
+May 03 15:03:51 lancorp systemd[1]: Reloading nginx.service - A high performance web server and a reverse proxy server...
+May 03 15:03:51 lancorp nginx[305614]: 2026/05/03 15:03:51 [notice] 305614#305614: signal process started
+May 03 15:03:51 lancorp systemd[1]: Reloaded nginx.service - A high performance web server and a reverse proxy server.

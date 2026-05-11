@@ -2,9 +2,7 @@
 
 import { useAppStore } from "@/lib/store";
 import { ROLE_ORDER, ROLE_META, RoleConfig, Role } from "@/lib/mock-data";
-import { Shield, Settings2, Info, MessageCircle } from "lucide-react";
-import { useState, useEffect } from "react";
-import { getTelegramStatus, generateTelegramLinkToken, disconnectTelegram } from "@/actions/telegram";
+import { Shield, Settings2, Info } from "lucide-react";
 
 const PERMISSION_LABELS: Record<keyof RoleConfig, string> = {
   canEditTask: "Редактировать задачи",
@@ -16,31 +14,6 @@ const PERMISSION_LABELS: Record<keyof RoleConfig, string> = {
 export default function SettingsPage() {
   const rolePermissions = useAppStore((s) => s.rolePermissions);
   const updateRolePermissions = useAppStore((s) => s.updateRolePermissions);
-
-  const [tgStatus, setTgStatus] = useState<{ connected: boolean; username?: string } | null>(null);
-  const [tgLink, setTgLink] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    getTelegramStatus().then(setTgStatus);
-  }, []);
-
-  const handleConnect = async () => {
-    setLoading(true);
-    const res = await generateTelegramLinkToken();
-    if (res?.link) {
-      setTgLink(res.link);
-    }
-    setLoading(false);
-  };
-
-  const handleDisconnect = async () => {
-    setLoading(true);
-    await disconnectTelegram();
-    setTgStatus({ connected: false });
-    setTgLink(null);
-    setLoading(false);
-  };
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-300">
@@ -121,68 +94,6 @@ export default function SettingsPage() {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-
-        <div className="max-w-4xl bg-[#111111] border border-border rounded-xl shadow-xl overflow-hidden mt-8">
-          <div className="px-6 py-4 border-b border-border bg-secondary/30 flex items-center gap-3">
-            <MessageCircle className="w-5 h-5 text-[#0088cc]" />
-            <h2 className="text-lg font-semibold text-foreground">Интеграция с Telegram</h2>
-          </div>
-          <div className="p-6">
-            <p className="text-sm text-muted-foreground mb-6">
-              Получайте уведомления о новых задачах и изменениях статусов прямо в Telegram.
-            </p>
-            
-            {!tgStatus ? (
-              <div className="text-sm text-muted-foreground">Загрузка...</div>
-            ) : tgStatus.connected ? (
-              <div className="flex items-center justify-between bg-primary/10 border border-primary/20 p-4 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#0088cc]/20 text-[#0088cc] rounded-full flex items-center justify-center font-bold">
-                    TG
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground">Подключено</div>
-                    <div className="text-sm text-muted-foreground">@{tgStatus.username || "Пользователь"}</div>
-                  </div>
-                </div>
-                <button
-                  onClick={handleDisconnect}
-                  disabled={loading}
-                  className="px-4 py-2 bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-md text-sm font-medium transition-colors"
-                >
-                  Отключить
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <button
-                  onClick={handleConnect}
-                  disabled={loading}
-                  className="px-4 py-2 bg-[#0088cc] text-white hover:bg-[#0088cc]/90 rounded-md text-sm font-medium transition-colors"
-                >
-                  Подключить Telegram
-                </button>
-                
-                {tgLink && (
-                  <div className="mt-4 p-4 border border-border rounded-lg bg-secondary/30">
-                    <p className="text-sm text-foreground mb-2 font-medium">Перейдите по ссылке для привязки аккаунта:</p>
-                    <a 
-                      href={tgLink} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[#0088cc] text-sm break-all hover:underline"
-                    >
-                      {tgLink}
-                    </a>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Ссылка действительна 15 минут
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
