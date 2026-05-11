@@ -4,7 +4,7 @@ import { useWorkspace } from "@/lib/workspace-context";
 import { useState, useEffect, FormEvent } from "react";
 import { User, Lock, MessageCircle, Shield, Loader2 } from "lucide-react";
 import { getTelegramStatus, generateTelegramLinkToken, disconnectTelegram } from "@/actions/telegram";
-import { updateProfileAction } from "@/actions/auth";
+import { updateProfile, changePassword } from "@/actions/auth";
 
 export default function ProfilePage() {
   const { currentUser, refresh } = useWorkspace();
@@ -48,7 +48,7 @@ export default function ProfilePage() {
     if (!name.trim() || name === currentUser?.name) return;
     setIsSavingName(true);
     setNameMessage(null);
-    const res = await updateProfileAction({ name: name.trim() });
+    const res = await updateProfile({ name: name.trim() });
     if (res.error) {
       setNameMessage({ text: res.error, type: "error" });
     } else {
@@ -64,7 +64,7 @@ export default function ProfilePage() {
     if (!currentPassword || !newPassword) return;
     setIsSavingPassword(true);
     setPassMessage(null);
-    const res = await updateProfileAction({ password: currentPassword, new_password: newPassword });
+    const res = await changePassword(currentPassword, newPassword);
     if (res.error) {
       setPassMessage({ text: res.error, type: "error" });
     } else {

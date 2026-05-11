@@ -56,8 +56,8 @@ export const api = {
     checkEmail: (email: string) =>
       req<{ exists: boolean }>("GET", "/auth/check-email", undefined, undefined, { email }),
 
-    register: (name: string, email: string, password: string) =>
-      req<{ token: string; user: UserDTO }>("POST", "/auth/register", undefined, { name, email, password }),
+    register: (name: string, email: string, password: string, inviteToken?: string) =>
+      req<{ token: string; user: UserDTO }>("POST", "/auth/register", undefined, { name, email, password, invite_token: inviteToken }),
 
     login: (email: string, password: string) =>
       req<{ token: string; user: UserDTO }>("POST", "/auth/login", undefined, { email, password }),
@@ -70,6 +70,9 @@ export const api = {
 
     updateProfile: (token: string, data: { name?: string; password?: string; new_password?: string }) =>
       req<{ ok: boolean }>("PATCH", "/auth/me", token, data),
+
+    changePassword: (token: string, current_password: string, new_password: string) =>
+      req<{ ok: boolean }>("POST", "/auth/change-password", token, { current_password, new_password }),
   },
 
   workspaces: {
@@ -92,12 +95,44 @@ export const api = {
     removeMember: (token: string, workspaceId: string, memberId: string) =>
       req("DELETE", `/workspaces/${workspaceId}/members/${memberId}`, token),
 
-    generateInvite: (token: string, workspaceId: string) =>
-      req<{ link: string }>("POST", `/workspaces/${workspaceId}/invite`, token),
+    generateInvite: (token: string, workspaceId: string, role?: string) =>
+      req<{ link: string; token: string; role: string }>("POST", `/workspaces/${workspaceId}/invite`, token, { role }),
+
+    listInvites: (token: string, workspaceId: string) =>
+      req<InviteDTO[]>("GET", `/workspaces/${workspaceId}/invites`, token),
+
+    revokeInvite: (token: string, workspaceId: string, inviteId: string) =>
+      req("DELETE", `/workspaces/${workspaceId}/invites/${inviteId}`, token),
 
     acceptInvite: (token: string, inviteToken: string) =>
       req<{ workspaceId: string }>("POST", "/workspaces/accept-invite", token, undefined,
         { token: inviteToken }),
+
+    updateMemberRole: (token: string, workspaceId: string, memberId: string, role: string) =>
+      req<{ id: string; role: string }>("PATCH", `/workspaces/${workspaceId}/members/${memberId}`, token, { role }),
+
+    rename: (token: string, workspaceId: string, name: string) =>
+      req<{ id: string; name: string }>("PATCH", `/workspaces/${workspaceId}`, token, { name }),
+
+    leave: (token: string, workspaceId: string) =>
+      req<{ ok: boolean }>("POST", `/workspaces/${workspaceId}/leave`, token),
+
+    delete: (token: string, workspaceId: string) =>
+      req<{ ok: boolean }>("DELETE", `/workspaces/${workspaceId}`, token),
+
+    getPermissions: (token: string, workspaceId: string) =>
+      req<{
+        keys: string[];
+        configurableRoles: string[];
+        matrix: Record<string, Record<string, boolean>>;
+        myRole: string;
+        myPermissions: Record<string, boolean>;
+      }>("GET", `/workspaces/${workspaceId}/permissions`, token),
+
+    updatePermissions: (token: string, workspaceId: string, matrix: Record<string, Record<string, boolean>>) =>
+      req<{ matrix: Record<string, Record<string, boolean>> }>(
+        "PUT", `/workspaces/${workspaceId}/permissions`, token, { matrix }
+      ),
   },
 
   tasks: {
@@ -127,6 +162,9 @@ export const api = {
 
     addComment: (token: string, taskId: string, text: string) =>
       req<{ comment: CommentDTO }>("POST", `/tasks/${taskId}/comments`, token, { text }),
+
+    activity: (token: string, taskId: string) =>
+      req<ActivityDTO[]>("GET", `/tasks/${taskId}/activity`, token),
   },
 
   contacts: {
@@ -158,6 +196,17 @@ export const api = {
       req("DELETE", `/tags/${tagId}`, token),
   },
 
+  projects: {
+    list: (token: string, workspaceId: string) =>
+      req<ProjectDTO[]>("GET", "/projects", token, undefined, { workspace_id: workspaceId }),
+
+    create: (token: string, workspaceId: string, name: string, color: string) =>
+      req<ProjectDTO>("POST", "/projects", token, { name, color }, { workspace_id: workspaceId }),
+
+    delete: (token: string, projectId: string) =>
+      req("DELETE", `/projects/${projectId}`, token),
+  },
+
   documents: {
     list: (token: string, workspaceId: string) =>
       req<DocumentDTO[]>("GET", "/documents", token, undefined, { workspace_id: workspaceId }),
@@ -186,6 +235,10 @@ export interface WorkspaceShortDTO {
 }
 export interface MemberDTO {
   id: string; userId: string; role: string; user: UserDTO;
+}
+export interface InviteDTO {
+  id: string; token: string; role: string;
+  expiresAt: string | null; usedAt: string | null; createdAt: string | null;
 }
 export interface TagDTO {
   id: string; label: string; color: string;
@@ -216,6 +269,13 @@ export interface TaskTagDTO {
 export interface CommentDTO {
   id: string; text: string; createdAt: string; author: UserDTO;
 }
+export interface ActivityDTO {
+  id: string;
+  action: string;
+  details: Record<string, any> | null;
+  createdAt: string;
+  user: UserDTO | null;
+}
 export interface TaskDTO {
   id: string; title: string; description?: string;
   status: string; priority: string;
@@ -227,6 +287,9 @@ export interface TaskDTO {
   createdAt: string;
   project?: { id: string; name: string; color: string } | null;
   contact?: ContactDTO | null;
+}
+export interface ProjectDTO {
+  id: string; name: string; color: string; workspaceId: string;
 }
 export interface DocumentDTO {
   id: string; title: string; content?: string; icon?: string;
