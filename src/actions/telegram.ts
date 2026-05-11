@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 const API_URL = "http://127.0.0.1:8000/api";
 
 export async function getTelegramStatus() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
   if (!token) return { connected: false };
 
@@ -23,7 +23,7 @@ export async function getTelegramStatus() {
 }
 
 export async function generateTelegramLinkToken() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
   if (!token) return { error: "Не авторизован" };
 
@@ -43,7 +43,7 @@ export async function generateTelegramLinkToken() {
 }
 
 export async function disconnectTelegram() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
   if (!token) return { error: "Не авторизован" };
 
