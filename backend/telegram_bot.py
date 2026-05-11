@@ -20,7 +20,7 @@ from sqlalchemy.orm import joinedload
 from database import SessionLocal
 from models import (
     TelegramLinkToken, TelegramAccount, TaskAssignee,
-    Task, TaskTag, Comment, User, ContactPhone,
+    Task, TaskTag, Comment, User, Contact, ContactPhone,
 )
 
 logger = logging.getLogger("telegram_bot")
@@ -57,13 +57,13 @@ def _h(text: str) -> str:
     return str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _load_task_full(db, task_id: str) -> Task | None:
+def _load_task_full(db, task_id: str):
     return (
         db.query(Task)
         .options(
             joinedload(Task.assignees).joinedload(TaskAssignee.user),
             joinedload(Task.tags).joinedload(TaskTag.tag),
-            joinedload(Task.contact).joinedload("phones"),
+            joinedload(Task.contact).joinedload(Contact.phones),
         )
         .filter_by(id=task_id)
         .first()
@@ -352,54 +352,64 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     chat_id = str(query.message.chat_id)
 
-    parts = data.split(":")
+    try:
+        parts = data.split(":")
 
-    # ── Pagination: l:N or a:N ──────────────────────────────────────────────
-    if len(parts) == 2 and parts[0] in ("l", "a"):
-        mode, page_str = parts
-        active_only = mode == "a"
-        await _show_list(update, chat_id, int(page_str), active_only, edit=True)
+        # ── Pagination: l:N or a:N ──────────────────────────────────────────────
+        if len(parts) == 2 and parts[0] in ("l", "a"):
+            mode, page_str = parts
+            active_only = mode == "a"
+            await _show_list(update, chat_id, int(page_str), active_only, edit=True)
 
-    # ── Open task: t:TASK_ID:MODE:PAGE ──────────────────────────────────────
-    elif len(parts) == 4 and parts[0] == "t":
-        _, task_id, from_mode, from_page = parts
-        await _show_task(update, chat_id, task_id, from_mode, int(from_page), edit=True)
+        # ── Open task: t:TASK_ID:MODE:PAGE ──────────────────────────────────────
+        elif len(parts) == 4 and parts[0] == "t":
+            _, task_id, from_mode, from_page = parts
+            await _show_task(update, chat_id, task_id, from_mode, int(from_page), edit=True)
 
-    # ── Back to list: b:MODE:PAGE ────────────────────────────────────────────
-    elif len(parts) == 3 and parts[0] == "b":
-        _, from_mode, from_page = parts
-        active_only = from_mode == "a"
-        await _show_list(update, chat_id, int(from_page), active_only, edit=True)
+        # ── Back to list: b:MODE:PAGE ────────────────────────────────────────────
+        elif len(parts) == 3 and parts[0] == "b":
+            _, from_mode, from_page = parts
+            active_only = from_mode == "a"
+            await _show_list(update, chat_id, int(from_page), active_only, edit=True)
 
-    # ── Complete task: d:TASK_ID:MODE:PAGE ───────────────────────────────────
-    elif len(parts) == 4 and parts[0] == "d":
-        _, task_id, from_mode, from_page = parts
-        with SessionLocal() as db:
-            account = _get_account(db, chat_id)
-            if not account:
-                await query.answer("❌ Аккаунт не привязан", show_alert=True)
-                return
+        # ── Complete task: d:TASK_ID:MODE:PAGE ───────────────────────────────────
+        elif len(parts) == 4 and parts[0] == "d":
+            _, task_id, from_mode, from_page = parts
+            with SessionLocal() as db:
+                account = _get_account(db, chat_id)
+                if not account:
+                    await query.answer("❌ Аккаунт не привязан", show_alert=True)
+                    return
 
-            task = db.query(Task).filter_by(id=task_id).first()
-            if not task:
-                await query.answer("❌ Задача не найдена", show_alert=True)
-                return
+                task = db.query(Task).filter_by(id=task_id).first()
+                if not task:
+                    await query.answer("❌ Задача не найдена", show_alert=True)
+                    return
 
-            is_assignee = db.query(TaskAssignee).filter_by(
-                taskId=task_id, userId=account.userId
-            ).first()
-            if not is_assignee:
-                await query.answer("❌ Вы не являетесь исполнителем этой задачи", show_alert=True)
-                return
+                is_assignee = db.query(TaskAssignee).filter_by(
+                    taskId=task_id, userId=account.userId
+                ).first()
+                if not is_assignee:
+                    await query.answer("❌ Вы не являетесь исполнителем", show_alert=True)
+                    return
 
-            task.status = "done"
-            task.updatedAt = datetime.utcnow()
-            db.commit()
+                task.status = "done"
+                task.updatedAt = datetime.utcnow()
+                db.commit()
 
-        await query.answer("✅ Задача завершена!")
-        # Go back to the list
-        active_only = from_mode == "a"
-        await _show_list(update, chat_id, int(from_page), active_only, edit=True)
+            await query.answer("✅ Задача завершена!")
+            active_only = from_mode == "a"
+            await _show_list(update, chat_id, int(from_page), active_only, edit=True)
+
+        else:
+            logger.warning(f"Unknown callback data: {data!r}")
+
+    except Exception as e:
+        logger.error(f"Error in handle_callback (data={data!r}): {e}", exc_info=True)
+        try:
+            await query.answer("❌ Произошла ошибка. Попробуйте ещё раз.", show_alert=True)
+        except Exception:
+            pass
 
 
 # ─── Notifications ────────────────────────────────────────────────────────────
@@ -434,12 +444,8 @@ async def send_task_notification(chat_id: str, task_data: dict) -> str | None:
         except Exception:
             pass
 
-    text += "\nОткройте бот и нажмите <b>📋 Все задачи</b> для управления."
-
     try:
-        msg = await bot.send_message(
-            chat_id=chat_id, text=text, parse_mode="HTML"
-        )
+        msg = await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
         return str(msg.message_id)
     except Exception as e:
         logger.error(f"Error sending notification: {e}")

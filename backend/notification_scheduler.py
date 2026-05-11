@@ -30,34 +30,8 @@ async def notification_loop():
             with SessionLocal() as db:
                 now = datetime.utcnow()
                 
-                # 1. Schedule notifications for new assignees
-                recent_cutoff = now - timedelta(seconds=15)
-                recent_assignees = db.query(TaskAssignee).filter(TaskAssignee.createdAt >= recent_cutoff).all()
-                
-                for ta in recent_assignees:
-                    existing = db.query(TelegramPendingNotification).filter(
-                        TelegramPendingNotification.taskId == ta.taskId,
-                        TelegramPendingNotification.userId == ta.userId,
-                        TelegramPendingNotification.sent == False
-                    ).first()
-                    
-                    if not existing:
-                        recent_sent = db.query(TelegramNotification).filter(
-                            TelegramNotification.taskId == ta.taskId,
-                            TelegramNotification.userId == ta.userId,
-                            TelegramNotification.createdAt >= now - timedelta(minutes=1)
-                        ).first()
-                        
-                        if not recent_sent:
-                            pending = TelegramPendingNotification(
-                                taskId=ta.taskId,
-                                userId=ta.userId,
-                                scheduledAt=now + timedelta(seconds=30)
-                            )
-                            db.add(pending)
-                            db.commit()
-
-                # 2. Process pending notifications that are due
+                # Process pending notifications that are due
+                # (These are created directly by tasks.py when assignee is added)
                 pending_due = db.query(TelegramPendingNotification).filter(
                     TelegramPendingNotification.sent == False,
                     TelegramPendingNotification.scheduledAt <= now
