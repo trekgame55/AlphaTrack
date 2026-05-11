@@ -15,6 +15,14 @@
 
 ---
 
+## 📸 Screenshots
+
+| Kanban Board | Week Calendar | User Profile & Telegram |
+|:---:|:---:|:---:|
+| <img src="public/screenshots/board.jpg" width="100%" alt="Task Board" /> | <img src="public/screenshots/week.jpg" width="100%" alt="Week View" /> | <img src="public/screenshots/profile.jpg" width="100%" alt="User Profile" /> |
+
+---
+
 ## ✨ Features
 
 | Feature | Description |
