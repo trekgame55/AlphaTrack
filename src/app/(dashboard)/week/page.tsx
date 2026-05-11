@@ -1,22 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, Plus, Calendar, Clock, Flag } from "lucide-react";
-import { Task, Priority, Status, todayStr, CURRENT_USER } from "@/lib/mock-data";
+import { Task, Priority, todayStr, CURRENT_USER } from "@/lib/mock-data";
 import { TaskModal } from "@/components/task-modal";
 import { useAppStore } from "@/lib/store";
-import { useAllStatuses, statusClasses, STATUS_COLOR_CLASSES } from "@/lib/statuses";
 import { getTaskAccess } from "@/lib/permissions";
 import { addDays } from "date-fns";
-import {
-  listTasks,
-  createTask as apiCreateTask,
-  updateTask as apiUpdateTask,
-  deleteTask as apiDeleteTask,
-} from "@/actions/tasks";
-import { useWorkspace, usePermission, usePermissionStatus } from "@/lib/workspace-context";
-import { NoAccess } from "@/components/no-access";
-import { dtoToTask } from "@/lib/task-adapter";
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   high:   "text-red-400",
@@ -32,19 +22,11 @@ const PRIORITY_BG_COLORS: Record<Priority, string> = {
   none:   "border-l-border",
 };
 
-// Status colors come from the shared status registry (built-in + custom)
-const statusBorderR = (id: string) => statusClasses(id)?.borderR ?? "border-r-border";
-const statusGlow    = (id: string) => statusClasses(id)?.glow    ?? "bg-border";
-
 const MONTHS_RU = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 const DAYS_RU   = ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"];
 
 function getDayKey(date: Date) {
-  // Local YYYY-MM-DD (toISOString shifts by TZ offset and breaks day matching)
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return date.toISOString().split("T")[0];
 }
 
 function CalendarDay({ date, tasks, isToday, isOtherMonth }: {
@@ -75,8 +57,8 @@ function CalendarDay({ date, tasks, isToday, isOtherMonth }: {
         {visible.map((t) => (
           <div
             key={t.id}
-            className={`text-[11px] px-1.5 py-0.5 rounded-md bg-secondary/50 border-l-2 border-r-2 ${PRIORITY_BG_COLORS[t.priority]} ${statusBorderR(t.status)} text-foreground/80 truncate`}
-            title={`${t.title} — ${t.status}`}
+            className={`text-[11px] px-1.5 py-0.5 rounded-md bg-secondary/50 border-l-2 ${PRIORITY_BG_COLORS[t.priority]} text-foreground/80 truncate`}
+            title={t.title}
           >
             {t.title}
           </div>
@@ -101,27 +83,9 @@ export default function WeekPage() {
   // Global store
   const tasks = useAppStore((s) => s.tasks).filter((t) => getTaskAccess(t) !== "none");
   const projects = useAppStore((s) => s.projects);
-  const setTasks = useAppStore((s) => s.setTasks);
   const addTask = useAppStore((s) => s.addTask);
   const updateTask = useAppStore((s) => s.updateTask);
   const deleteTask = useAppStore((s) => s.deleteTask);
-
-  const { workspace } = useWorkspace();
-  const viewStatus = usePermissionStatus("tasks.view");
-  const canEditTask = usePermission("tasks.edit");
-  const allStatuses = useAllStatuses();
-
-  // Load tasks from backend on mount / workspace change
-  useEffect(() => {
-    if (!workspace?.id) return;
-    let cancelled = false;
-    const wsCtx = { id: workspace.id, name: workspace.name };
-    listTasks(workspace.id).then((dtos) => {
-      if (cancelled) return;
-      setTasks(dtos.map((d) => dtoToTask(d, wsCtx)));
-    });
-    return () => { cancelled = true; };
-  }, [workspace?.id, setTasks]);
 
   // Week state
   const [weekOffset, setWeekOffset] = useState(0);
@@ -133,6 +97,50 @@ export default function WeekPage() {
 
   // Month state
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+
+  // Touch handlers for mobile
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const isSwiping = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isSwiping.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (Math.abs(dx) > 15 && dy < 80) {
+      isSwiping.current = true;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!isSwiping.current || view !== "week") return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+
+    if (Math.abs(dx) < 60 || dy > 80) return;
+
+    if (dx > 0) {
+      // Свайп вправо -> день вперед
+      if (mobileDayIdx < 6) setMobileDayIdx(m => m + 1);
+      else {
+        setWeekOffset(w => w + 1);
+        setMobileDayIdx(0);
+      }
+    } else {
+      // Свайп влево -> день назад
+      if (mobileDayIdx > 0) setMobileDayIdx(m => m - 1);
+      else {
+        setWeekOffset(w => w - 1);
+        setMobileDayIdx(6);
+      }
+    }
+    isSwiping.current = false;
+  };
 
   // --- Week Logic ---
   const weekDays = useMemo(() => {
@@ -188,55 +196,31 @@ export default function WeekPage() {
   }, [tasks]);
 
   // --- Actions ---
-  const handleAddTask = async (dateKey: string) => {
-    if (!workspace?.id) return;
-    const res = await apiCreateTask({
+  const handleAddTask = (dateKey: string) => {
+    const newTask: Task = {
+      id: `T-${Date.now().toString().slice(-4)}`,
       title: "Новая задача",
-      workspaceId: workspace.id,
-      group: "No date",
+      status: "todo",
+      priority: "none",
       dueDate: dateKey,
-      projectId: projects[0]?.id || undefined,
-    });
-    if ("error" in res) {
-      console.error(res.error);
-      return;
-    }
-    const task = dtoToTask(res.task, { id: workspace.id, name: workspace.name });
-    addTask(task);
-    setSelectedTask(task);
-  };
-
-  const handleUpdateTask = async (updated: Task) => {
-    if (!canEditTask) return;
-    // optimistic local update
-    updateTask(updated);
-    const res = await apiUpdateTask(updated.id, {
-      title: updated.title,
-      description: updated.description,
-      status: updated.status,
-      priority: updated.priority,
-      dueDate: updated.dueDate ?? null,
-      startDate: updated.startDate ?? null,
-      group: updated.group,
-      contactId: updated.contactId ?? null,
-      assigneeIds: updated.assignees.map((a) => a.id),
-      tagIds: updated.tags.map((t) => t.id),
-    });
-    if ("task" in res && res.task) updateTask(dtoToTask(res.task, workspace ? { id: workspace.id, name: workspace.name } : undefined));
-    else if ("error" in res) console.error(res.error);
-  };
-
-  const handleDeleteTask = async (id: string) => {
-    const res = await apiDeleteTask(id);
-    if ("success" in res && res.success) deleteTask(id);
-    else if ("error" in res) console.error(res.error);
+      projectId: projects[0]?.id || "",
+      projectName: projects[0]?.name || "Нет проекта",
+      projectColor: projects[0]?.color || "bg-secondary",
+      assignees: [],
+      tags: [],
+      comments: [],
+      createdAt: new Date().toISOString().split("T")[0],
+      group: "No date",
+    };
+    addTask(newTask);
+    setSelectedTask(newTask);
   };
 
   const handleToggleDone = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const t = tasks.find(x => x.id === taskId);
     if (t) {
-      handleUpdateTask({ ...t, status: t.status === "done" ? "todo" : "done" });
+      updateTask({ ...t, status: t.status === "done" ? "todo" : "done" });
     }
   };
 
@@ -265,11 +249,13 @@ export default function WeekPage() {
         return `${f} — ${l}`;
       })();
 
-  if (viewStatus === "loading") return null;
-  if (viewStatus === "denied")  return <NoAccess />;
-
   return (
-    <div className="flex flex-col h-full animate-in fade-in duration-300">
+    <div 
+      className="flex flex-col h-full animate-in fade-in duration-300"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         {/* Navigation */}
@@ -336,22 +322,10 @@ export default function WeekPage() {
       </div>
 
       {view === "month" && (
-        <div className="flex flex-col gap-1 mb-3 text-[11px] text-muted-foreground">
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="font-medium text-foreground/70">Приоритет (слева):</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-red-400 bg-secondary/50" />Высокий</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-yellow-400 bg-secondary/50" />Средний</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-blue-400 bg-secondary/50" />Низкий</span>
-          </div>
-          <div className="flex items-center gap-4 flex-wrap">
-            <span className="font-medium text-foreground/70">Статус (справа):</span>
-            {allStatuses.map((s) => (
-              <span key={s.id} className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-sm border-r-2 ${STATUS_COLOR_CLASSES[s.color].borderR} bg-secondary/50`} />
-                {s.label}
-              </span>
-            ))}
-          </div>
+        <div className="flex items-center gap-4 mb-3 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-red-400 bg-secondary/50" />Высокий</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-yellow-400 bg-secondary/50" />Средний</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm border-l-2 border-l-blue-400 bg-secondary/50" />Низкий</span>
         </div>
       )}
 
@@ -429,11 +403,11 @@ export default function WeekPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onUpdate={(updated) => {
-            handleUpdateTask(updated);
+            updateTask(updated);
             setSelectedTask(updated);
           }}
           onDelete={(id) => {
-            handleDeleteTask(id);
+            deleteTask(id);
             setSelectedTask(null);
           }}
         />
@@ -481,11 +455,27 @@ function DayColumn({ day, tasks, onTaskClick, onToggleDone, onAddTask, mobile }:
           <button
             key={task.id}
             onClick={() => onTaskClick(task)}
-            className="relative w-full text-left bg-secondary/40 hover:bg-secondary/70 border border-transparent hover:border-border rounded-lg p-2.5 pb-3 transition-all group"
+            className="w-full text-left bg-secondary/40 hover:bg-secondary/70 border border-transparent hover:border-border rounded-lg p-2.5 transition-all group"
           >
             <div className="flex items-start gap-2">
+              {/* Done checkbox */}
+              <div
+                onClick={(e) => onToggleDone(task.id, e)}
+                className={`mt-0.5 w-[14px] h-[14px] rounded-[3px] border shrink-0 flex items-center justify-center transition-colors ${
+                  task.status === "done"
+                    ? "bg-emerald-500 border-emerald-500 text-white"
+                    : "border-border hover:border-primary"
+                }`}
+              >
+                {task.status === "done" && (
+                  <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+              
               <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-medium leading-snug text-foreground">
+                <p className={`text-[12px] font-medium leading-snug ${task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>
                   {task.title}
                 </p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -518,11 +508,6 @@ function DayColumn({ day, tasks, onTaskClick, onToggleDone, onAddTask, mobile }:
                 </div>
               </div>
             </div>
-            {/* Neon status indicator */}
-            <span
-              className={`pointer-events-none absolute bottom-0 left-2.5 right-2.5 h-[2px] rounded-full ${statusGlow(task.status)}`}
-              aria-hidden
-            />
           </button>
         ))}
 

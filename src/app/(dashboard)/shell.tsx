@@ -5,15 +5,12 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
-import { useSwipeNavigation } from "@/lib/use-swipe-navigation";
 import { WorkspaceProvider } from "@/lib/workspace-context";
 import { TeamGuard } from "@/components/team-guard";
 
 export function DashboardShell({ userId, children }: { userId: string; children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-
-  useSwipeNavigation(pathname);
 
   return (
     <WorkspaceProvider userId={userId}>
