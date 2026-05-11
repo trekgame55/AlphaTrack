@@ -1,3 +1,6 @@
+"""
+SQLAlchemy models — mirrors the Prisma schema exactly
+"""
 from sqlalchemy import (
     Column, String, DateTime, Boolean, ForeignKey, Text, UniqueConstraint
 )
@@ -10,6 +13,8 @@ import uuid
 def gen_id():
     return str(uuid.uuid4())
 
+
+# ─── Auth ─────────────────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
@@ -27,7 +32,6 @@ class User(Base):
     memberships       = relationship("WorkspaceMember", back_populates="user",      cascade="all, delete")
     taskAssignees     = relationship("TaskAssignee",    back_populates="user",      cascade="all, delete")
     comments          = relationship("Comment",         back_populates="author")
-    fcm_tokens        = relationship("FcmToken",        back_populates="user",      cascade="all, delete")
 
 
 class Session(Base):
@@ -41,6 +45,8 @@ class Session(Base):
 
     user = relationship("User", back_populates="sessions")
 
+
+# ─── Workspace ────────────────────────────────────────────────────────────────
 
 class Workspace(Base):
     __tablename__ = "workspaces"
@@ -75,21 +81,6 @@ class WorkspaceMember(Base):
     user      = relationship("User",      back_populates="memberships")
 
 
-class RolePermission(Base):
-    """One row per (workspace, role, permission_key) marking whether the role has that permission.
-    Owner (admin_plus) and admin always have all permissions implicitly — not stored here.
-    Configured roles: member, viewer.
-    """
-    __tablename__ = "role_permissions"
-    __table_args__ = (UniqueConstraint("workspaceId", "role", "permKey"),)
-
-    id          = Column(String, primary_key=True, default=gen_id)
-    workspaceId = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
-    role        = Column(String, nullable=False)
-    permKey     = Column(String, nullable=False)
-    allowed     = Column(Boolean, default=True, nullable=False)
-
-
 class WorkspaceInvite(Base):
     __tablename__ = "workspace_invites"
 
@@ -97,13 +88,15 @@ class WorkspaceInvite(Base):
     workspaceId = Column(String, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
     token       = Column(String, unique=True, nullable=False)
     email       = Column(String, nullable=True)
-    role        = Column(String, default="viewer")
+    role        = Column(String, default="member")
     usedAt      = Column(DateTime, nullable=True)
     expiresAt   = Column(DateTime, nullable=False)
     createdAt   = Column(DateTime, server_default=func.now())
 
     workspace = relationship("Workspace", back_populates="invites")
 
+
+# ─── Projects ─────────────────────────────────────────────────────────────────
 
 class Project(Base):
     __tablename__ = "projects"
@@ -119,6 +112,8 @@ class Project(Base):
     tasks     = relationship("Task",      back_populates="project")
 
 
+# ─── Tags ─────────────────────────────────────────────────────────────────────
+
 class Tag(Base):
     __tablename__ = "tags"
 
@@ -130,6 +125,8 @@ class Tag(Base):
     workspace = relationship("Workspace", back_populates="tags")
     tasks     = relationship("TaskTag",   back_populates="tag", cascade="all, delete")
 
+
+# ─── Tasks ────────────────────────────────────────────────────────────────────
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -155,8 +152,6 @@ class Task(Base):
     tags      = relationship("TaskTag",      back_populates="task", cascade="all, delete")
     comments  = relationship("Comment",      back_populates="task", cascade="all, delete",
                              order_by="Comment.createdAt")
-    activities = relationship("Activity",    back_populates="task", cascade="all, delete",
-                              order_by="Activity.createdAt")
 
 
 class TaskAssignee(Base):
@@ -164,6 +159,7 @@ class TaskAssignee(Base):
 
     taskId = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True)
     userId = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    createdAt = Column(DateTime, server_default=func.now())
 
     task = relationship("Task", back_populates="assignees")
     user = relationship("User", back_populates="taskAssignees")
@@ -192,19 +188,7 @@ class Comment(Base):
     author = relationship("User", back_populates="comments")
 
 
-class Activity(Base):
-    __tablename__ = "activities"
-
-    id        = Column(String, primary_key=True, default=gen_id)
-    taskId    = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
-    userId    = Column(String, ForeignKey("users.id"),                     nullable=True)
-    action    = Column(String, nullable=False)
-    details   = Column(Text,   nullable=True)
-    createdAt = Column(DateTime, server_default=func.now())
-
-    task = relationship("Task", back_populates="activities")
-    user = relationship("User")
-
+# ─── Contacts ─────────────────────────────────────────────────────────────────
 
 class Contact(Base):
     __tablename__ = "contacts"
@@ -234,6 +218,8 @@ class ContactPhone(Base):
     contact = relationship("Contact", back_populates="phones")
 
 
+# ─── Documents ────────────────────────────────────────────────────────────────
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -250,14 +236,56 @@ class Document(Base):
     author    = relationship("User")
 
 
-class FcmToken(Base):
-    """Stores one FCM push token per device per user."""
-    __tablename__ = "fcm_tokens"
-    __table_args__ = (UniqueConstraint("userId", "token"),)
+# ─── Telegram ─────────────────────────────────────────────────────────────────
+
+class TelegramAccount(Base):
+    __tablename__ = "telegram_accounts"
+
+    id        = Column(String, primary_key=True, default=gen_id)
+    userId    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    chatId    = Column(String, unique=True, nullable=False)
+    username  = Column(String, nullable=True)
+    createdAt = Column(DateTime, server_default=func.now())
+
+    user      = relationship("User", backref="telegramAccount")
+
+
+class TelegramNotification(Base):
+    __tablename__ = "telegram_notifications"
+
+    id           = Column(String, primary_key=True, default=gen_id)
+    taskId       = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    userId       = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    chatId       = Column(String, nullable=False)
+    messageId    = Column(String, nullable=False)
+    taskSnapshot = Column(Text,   nullable=False) # JSON text
+    createdAt    = Column(DateTime, server_default=func.now())
+    updatedAt    = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    task         = relationship("Task")
+    user         = relationship("User")
+
+
+class TelegramLinkToken(Base):
+    __tablename__ = "telegram_link_tokens"
 
     id        = Column(String, primary_key=True, default=gen_id)
     userId    = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    token     = Column(String, nullable=False)
-    createdAt = Column(DateTime, server_default=func.now())
+    token     = Column(String, unique=True, nullable=False)
+    expiresAt = Column(DateTime, nullable=False)
+    usedAt    = Column(DateTime, nullable=True)
 
-    user = relationship("User", back_populates="fcm_tokens")
+    user      = relationship("User")
+
+
+class TelegramPendingNotification(Base):
+    __tablename__ = "telegram_pending_notifications"
+
+    id          = Column(String, primary_key=True, default=gen_id)
+    taskId      = Column(String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    userId      = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    scheduledAt = Column(DateTime, nullable=False)
+    sent        = Column(Boolean, default=False)
+
+    task        = relationship("Task")
+    user        = relationship("User")
