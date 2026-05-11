@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
-from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact, FcmToken
+from models import Task, TaskAssignee, TaskTag, Comment, WorkspaceMember, User, Tag, Activity, Contact, FcmToken, TelegramAccount, TelegramPendingNotification
 from schemas import TaskCreate, TaskUpdate, TaskOut, CommentCreate, CommentOut
 from deps import get_current_user
 from permissions import require_permission
@@ -165,6 +165,21 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db), user: User = De
     _log(db, task.id, user.id, "created", {"title": task.title})
 
     db.commit()
+    db.refresh(task)
+
+    # Schedule Telegram notifications for all assignees (including self)
+    for uid in body.assigneeIds:
+        tg = db.query(TelegramAccount).filter_by(userId=uid).first()
+        if tg:
+            pending = TelegramPendingNotification(
+                id=str(uuid.uuid4()),
+                taskId=task.id,
+                userId=uid,
+                scheduledAt=datetime.now(timezone.utc)
+            )
+            db.add(pending)
+    db.commit()
+
     return {"task": _serialize_task(_load_task(db, task.id))}
 
 
@@ -281,6 +296,18 @@ def update_task(task_id: str, body: TaskUpdate, db: Session = Depends(get_db), u
         db.query(TaskAssignee).filter_by(taskId=task_id).delete()
         for uid in new_ids:
             db.add(TaskAssignee(taskId=task_id, userId=uid))
+
+        # Schedule Telegram notifications for newly added assignees
+        for uid in added:
+            tg = db.query(TelegramAccount).filter_by(userId=uid).first()
+            if tg:
+                pending = TelegramPendingNotification(
+                    id=str(uuid.uuid4()),
+                    taskId=task_id,
+                    userId=uid,
+                    scheduledAt=datetime.now(timezone.utc)
+                )
+                db.add(pending)
 
     # ── Diff tags ──
     if body.tagIds is not None:

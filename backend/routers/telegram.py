@@ -32,7 +32,7 @@ def generate_link_token(user: User = Depends(get_current_user), db: Session = De
     db.add(token)
     db.commit()
     
-    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "MUIDWFSRHUGF_bot")
+    bot_username = os.getenv("TELEGRAM_BOT_USERNAME", "MUIWDFSRHUGF_bot")
     
     return {"token": token_str, "link": f"https://t.me/{bot_username}?start={token_str}"}
 
